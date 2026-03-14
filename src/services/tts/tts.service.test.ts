@@ -105,7 +105,7 @@ describe('TTSService', () => {
     }, 0);
 
     await resultPromise;
-    expect(service['tts'].toStream).toHaveBeenCalledWith('你好', { rate: '50%' });
+    expect(service['tts'].toStream).toHaveBeenCalledWith('你好', { rate: '+50%' });
   });
 
   it('应该返回 Buffer 类型', async () => {
@@ -127,5 +127,72 @@ describe('TTSService', () => {
     const result = await resultPromise;
     expect(result).toBeInstanceOf(Buffer);
     expect(result.toString()).toBe('chunk1chunk2');
+  });
+
+  it('应该正确处理 rate < 1.0 的情况', async () => {
+    const service = new TTSService();
+    const mockAudioStream = new EventEmitter();
+
+    vi.mocked(service['tts'].toStream).mockReturnValue({
+      audioStream: mockAudioStream,
+    });
+
+    const resultPromise = service.synthesize({ text: '你好', rate: 0.8 });
+
+    setTimeout(() => {
+      mockAudioStream.emit('data', Buffer.from('audio'));
+      mockAudioStream.emit('end');
+    }, 0);
+
+    await resultPromise;
+    expect(service['tts'].toStream).toHaveBeenCalledWith('你好', { rate: '-20%' });
+  });
+
+  it('应该在 rate 小于 0.5 时抛出错误', async () => {
+    const service = new TTSService();
+    await expect(service.synthesize({ text: '你好', rate: 0.4 })).rejects.toThrow('语速必须在 0.5 到 2.0 之间');
+  });
+
+  it('应该在 rate 大于 2.0 时抛出错误', async () => {
+    const service = new TTSService();
+    await expect(service.synthesize({ text: '你好', rate: 2.1 })).rejects.toThrow('语速必须在 0.5 到 2.0 之间');
+  });
+
+  it('应该接受 rate 边界值 0.5', async () => {
+    const service = new TTSService();
+    const mockAudioStream = new EventEmitter();
+
+    vi.mocked(service['tts'].toStream).mockReturnValue({
+      audioStream: mockAudioStream,
+    });
+
+    const resultPromise = service.synthesize({ text: '你好', rate: 0.5 });
+
+    setTimeout(() => {
+      mockAudioStream.emit('data', Buffer.from('audio'));
+      mockAudioStream.emit('end');
+    }, 0);
+
+    await resultPromise;
+    expect(service['tts'].toStream).toHaveBeenCalledWith('你好', { rate: '-50%' });
+  });
+
+  it('应该接受 rate 边界值 2.0', async () => {
+    const service = new TTSService();
+    const mockAudioStream = new EventEmitter();
+
+    vi.mocked(service['tts'].toStream).mockReturnValue({
+      audioStream: mockAudioStream,
+    });
+
+    const resultPromise = service.synthesize({ text: '你好', rate: 2.0 });
+
+    setTimeout(() => {
+      mockAudioStream.emit('data', Buffer.from('audio'));
+      mockAudioStream.emit('end');
+    }, 0);
+
+    await resultPromise;
+    expect(service['tts'].toStream).toHaveBeenCalledWith('你好', { rate: '+100%' });
   });
 });
