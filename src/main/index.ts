@@ -39,6 +39,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('import-book', async (_, filePath: string) => bookHandler.importBook(filePath));
   ipcMain.handle('get-books', async () => bookHandler.getBooks());
   ipcMain.handle('get-book', async (_, id: string) => bookHandler.getBook(id));
+  ipcMain.handle('get-book-content', async (_, id: string) => bookHandler.getBookContent(id));
   ipcMain.handle('save-progress', async (_, data) => bookHandler.saveProgress(data.bookId, data.chapterId, data.offset, data.progress));
   ipcMain.handle('get-progress', async (_, bookId: string) => bookHandler.getProgress(bookId));
 

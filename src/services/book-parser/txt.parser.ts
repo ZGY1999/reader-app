@@ -1,5 +1,7 @@
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
+import * as jschardet from 'jschardet';
+import * as iconv from 'iconv-lite';
 
 export interface Chapter {
   id: string;
@@ -17,7 +19,11 @@ export interface Book {
 
 export class TxtParser {
   async parse(filePath: string): Promise<Book> {
-    const content = await fs.readFile(filePath, 'utf-8');
+    const buffer = await fs.readFile(filePath);
+    const detected = jschardet.detect(buffer);
+    const encoding = detected.encoding || 'utf-8';
+    const content = iconv.decode(buffer, encoding);
+
     const lines = content.split('\n');
 
     const title = lines[0]?.trim() || '未命名';

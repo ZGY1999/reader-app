@@ -1,3 +1,5 @@
+import { LRUCache } from '../../utils/cache';
+
 export interface SearchResult {
   chunkId: string;
   content: string;
@@ -18,13 +20,20 @@ export class VectorService {
   private nodes: Map<number, VectorNode> = new Map();
   private nextId = 0;
   private readonly M = 16; // HNSW 参数：每个节点的最大邻居数
+  private embeddingCache: LRUCache<string, number[]>;
+  private searchCache: LRUCache<string, SearchResult[]>;
 
   constructor(apiKey: string, baseURL: string) {
     this.apiKey = apiKey;
     this.baseURL = baseURL;
+    this.embeddingCache = new LRUCache(100);
+    this.searchCache = new LRUCache(50);
   }
 
   async embed(text: string): Promise<number[]> {
+    const cached = this.embeddingCache.get(text);
+    if (cached) return cached;
+
     const response = await fetch(`${this.baseURL}/embeddings`, {
       method: 'POST',
       headers: {
@@ -42,7 +51,9 @@ export class VectorService {
     }
 
     const data = await response.json();
-    return data.data[0].embedding;
+    const embedding = data.data[0].embedding;
+    this.embeddingCache.set(text, embedding);
+    return embedding;
   }
 
   async addChunk(chunkId: string, content: string): Promise<void> {
@@ -60,14 +71,21 @@ export class VectorService {
   async search(query: string, topK: number): Promise<SearchResult[]> {
     if (this.nodes.size === 0) return [];
 
+    const cacheKey = `${query}:${topK}`;
+    const cached = this.searchCache.get(cacheKey);
+    if (cached) return cached;
+
     const queryEmbedding = await this.embed(query);
     const candidates = this.findNearest(queryEmbedding, topK);
 
-    return candidates.map(node => ({
+    const results = candidates.map(node => ({
       chunkId: node.chunkId,
       content: node.content,
       score: this.cosineSimilarity(queryEmbedding, node.embedding)
     }));
+
+    this.searchCache.set(cacheKey, results);
+    return results;
   }
 
   async addDocument(bookId: string, chunks: Array<{ id: string; content: string }>): Promise<void> {

@@ -36,9 +36,9 @@ export class Database {
     const result = this.db.exec(sql, params);
     if (result.length === 0) return [];
 
-    return result[0].values.map(row => {
+    return result[0].values.map((row: any) => {
       const obj: any = {};
-      result[0].columns.forEach((col, i) => {
+      result[0].columns.forEach((col: string, i: number) => {
         obj[col] = row[i];
       });
       return obj;

@@ -15,6 +15,14 @@ export class WindowManager {
       },
     });
 
+    // 开发模式：加载Vite dev server
+    if (process.env.NODE_ENV === 'development') {
+      this.mainWindow.loadURL('http://localhost:5174');
+    } else {
+      // 生产模式：加载构建后的文件
+      this.mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+    }
+
     return this.mainWindow;
   }
 

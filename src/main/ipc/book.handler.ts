@@ -38,6 +38,14 @@ export class BookHandler {
     return this.bookRepo.findById(id);
   }
 
+  async getBookContent(id: string) {
+    const book = this.bookRepo.findById(id);
+    if (!book) throw new Error('Book not found');
+
+    const parsed = await this.txtParser.parse(book.filePath);
+    return { content: parsed.content, chapters: parsed.chapters };
+  }
+
   async saveProgress(bookId: string, chapterId: string, offset: number, progress: number) {
     this.progressRepo.save({ bookId, chapterId, offset, progress });
     return { success: true };

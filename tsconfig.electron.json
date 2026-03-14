@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "outDir": "dist",
+    "noEmit": false,
+    "typeRoots": ["./node_modules/@types", "./src/types"]
+  },
+  "include": [
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/database/**/*",
+    "src/services/**/*",
+    "src/utils/**/*",
+    "src/types/**/*"
+  ],
+  "exclude": ["**/*.test.ts", "**/*.test.tsx"]
+}

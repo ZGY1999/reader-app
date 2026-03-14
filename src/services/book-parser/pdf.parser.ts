@@ -23,8 +23,9 @@ export class PdfParser {
     const pdf = await pdfjsLib.getDocument({ data }).promise;
 
     const metadata = await pdf.getMetadata();
-    const title = metadata.info?.Title || '未命名';
-    const author = metadata.info?.Author;
+    const info = metadata.info as any;
+    const title = info?.Title || '未命名';
+    const author = info?.Author;
 
     let fullContent = '';
     const chapters: Chapter[] = [];
