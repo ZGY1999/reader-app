@@ -148,4 +148,47 @@ describe('ChatService', () => {
     expect(systemMessage.content).toContain('如果内容中没有相关信息');
     expect(systemMessage.content).toContain('不要编造或推测');
   });
+
+  it('应该处理 API 返回格式异常（缺少 choices）', async () => {
+    // Arrange
+    vi.mocked(mockVectorService.search).mockResolvedValue([]);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({})
+    });
+
+    // Act & Assert
+    await expect(chatService.chat({ bookId: 'book1', question: '测试' })).rejects.toThrow('API 返回格式异常');
+  });
+
+  it('应该处理 API 返回格式异常（缺少 message）', async () => {
+    // Arrange
+    vi.mocked(mockVectorService.search).mockResolvedValue([]);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{}]
+      })
+    });
+
+    // Act & Assert
+    await expect(chatService.chat({ bookId: 'book1', question: '测试' })).rejects.toThrow('API 返回格式异常');
+  });
+
+  it('应该处理流式响应体为空的情况', async () => {
+    // Arrange
+    vi.mocked(mockVectorService.search).mockResolvedValue([]);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      body: null
+    });
+
+    // Act & Assert
+    const stream = chatService.chatStream({ bookId: 'book1', question: '测试' });
+    await expect(async () => {
+      for await (const _ of stream) {
+        // 消费流
+      }
+    }).rejects.toThrow('响应体为空');
+  });
 });

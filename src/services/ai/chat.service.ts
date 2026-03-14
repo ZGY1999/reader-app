@@ -12,6 +12,8 @@ export interface ChatOptions {
 }
 
 export class ChatService {
+  private readonly model = 'gpt-3.5-turbo';
+
   constructor(
     private apiKey: string,
     private baseURL: string,
@@ -28,7 +30,7 @@ export class ChatService {
         'Authorization': `Bearer ${this.apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages
       })
     });
@@ -38,6 +40,9 @@ export class ChatService {
     }
 
     const data = await response.json();
+    if (!data.choices?.[0]?.message?.content) {
+      throw new Error('API 返回格式异常');
+    }
     return data.choices[0].message.content;
   }
 
@@ -51,7 +56,7 @@ export class ChatService {
         'Authorization': `Bearer ${this.apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages,
         stream: true
       })
@@ -61,7 +66,11 @@ export class ChatService {
       throw new Error(`API 错误: ${response.status}`);
     }
 
-    const reader = response.body!.getReader();
+    if (!response.body) {
+      throw new Error('响应体为空');
+    }
+
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
     while (true) {
