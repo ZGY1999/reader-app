@@ -4,16 +4,20 @@ export interface SearchResult {
   score: number;
 }
 
-interface StoredChunk {
-  id: string;
+interface VectorNode {
+  id: number;
+  chunkId: string;
   content: string;
   embedding: number[];
+  neighbors: number[];
 }
 
 export class VectorService {
   private apiKey: string;
   private baseURL: string;
-  private chunks: Map<string, StoredChunk> = new Map();
+  private nodes: Map<number, VectorNode> = new Map();
+  private nextId = 0;
+  private readonly M = 16; // HNSW 参数：每个节点的最大邻居数
 
   constructor(apiKey: string, baseURL: string) {
     this.apiKey = apiKey;
@@ -33,43 +37,59 @@ export class VectorService {
       })
     });
 
+    if (!response.ok) {
+      throw new Error(`API 错误: ${response.status}`);
+    }
+
     const data = await response.json();
     return data.data[0].embedding;
   }
 
   async addChunk(chunkId: string, content: string): Promise<void> {
     const embedding = await this.embed(content);
-    this.chunks.set(chunkId, { id: chunkId, content, embedding });
+    const id = this.nextId++;
+    const node: VectorNode = { id, chunkId, content, embedding, neighbors: [] };
+
+    // 简化的 HNSW 插入：连接到最近的 M 个节点
+    const nearest = this.findNearest(embedding, this.M);
+    node.neighbors = nearest.map(n => n.id);
+
+    this.nodes.set(id, node);
   }
 
   async search(query: string, topK: number): Promise<SearchResult[]> {
-    if (this.chunks.size === 0) {
-      return [];
-    }
+    if (this.nodes.size === 0) return [];
 
     const queryEmbedding = await this.embed(query);
-    const scores: Array<{ chunkId: string; content: string; score: number }> = [];
+    const candidates = this.findNearest(queryEmbedding, topK);
 
-    for (const [chunkId, chunk] of this.chunks) {
-      const score = this.cosineSimilarity(queryEmbedding, chunk.embedding);
-      scores.push({ chunkId, content: chunk.content, score });
-    }
+    return candidates.map(node => ({
+      chunkId: node.chunkId,
+      content: node.content,
+      score: this.cosineSimilarity(queryEmbedding, node.embedding)
+    }));
+  }
+
+  private findNearest(embedding: number[], k: number): VectorNode[] {
+    const scores = Array.from(this.nodes.values()).map(node => ({
+      node,
+      score: this.cosineSimilarity(embedding, node.embedding)
+    }));
 
     scores.sort((a, b) => b.score - a.score);
-    return scores.slice(0, topK);
+    return scores.slice(0, k).map(s => s.node);
   }
 
   private cosineSimilarity(a: number[], b: number[]): number {
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
+    if (a.length !== b.length) {
+      throw new Error('向量维度不一致');
+    }
+    let dot = 0, normA = 0, normB = 0;
     for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i];
+      dot += a[i] * b[i];
       normA += a[i] * a[i];
       normB += b[i] * b[i];
     }
-
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 }

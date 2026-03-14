@@ -15,6 +15,7 @@ describe('VectorService', () => {
       const mockEmbedding = [0.1, 0.2, 0.3, 0.4, 0.5];
 
       global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
         json: async () => ({
           data: [{ embedding: mockEmbedding }]
         })
@@ -39,12 +40,23 @@ describe('VectorService', () => {
 
       await expect(vectorService.embed('测试文本')).rejects.toThrow('API 错误');
     });
+
+    it('应该检查 HTTP 响应状态', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: 'Unauthorized' })
+      });
+
+      await expect(vectorService.embed('测试文本')).rejects.toThrow('API 错误: 401');
+    });
   });
 
   describe('向量存储和索引', () => {
     it('应该添加向量到索引', async () => {
       const mockEmbedding = [0.1, 0.2, 0.3];
       global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
         json: async () => ({
           data: [{ embedding: mockEmbedding }]
         })
@@ -59,6 +71,7 @@ describe('VectorService', () => {
     it('应该存储多个向量', async () => {
       const mockEmbedding = [0.1, 0.2, 0.3];
       global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
         json: async () => ({
           data: [{ embedding: mockEmbedding }]
         })
@@ -72,10 +85,29 @@ describe('VectorService', () => {
     });
   });
 
+  describe('向量维度验证', () => {
+    it('应该检查向量维度一致性', async () => {
+      const mockEmbedding = [0.1, 0.2, 0.3];
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [{ embedding: mockEmbedding }]
+        })
+      });
+
+      await vectorService.addChunk('chunk-1', '内容1');
+
+      // 模拟维度不一致的向量
+      const inconsistentVector = [0.1, 0.2]; // 只有2个维度
+      expect(() => vectorService['cosineSimilarity'](mockEmbedding, inconsistentVector)).toThrow('向量维度不一致');
+    });
+  });
+
   describe('相似度搜索', () => {
     it('应该返回最相似的文本块', async () => {
       const mockEmbedding = [0.1, 0.2, 0.3];
       global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
         json: async () => ({
           data: [{ embedding: mockEmbedding }]
         })
@@ -97,6 +129,7 @@ describe('VectorService', () => {
     it('应该返回 top-k 个结果', async () => {
       const mockEmbedding = [0.1, 0.2, 0.3];
       global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
         json: async () => ({
           data: [{ embedding: mockEmbedding }]
         })
@@ -120,6 +153,7 @@ describe('VectorService', () => {
     it('应该返回按相似度排序的结果', async () => {
       const mockEmbedding = [0.1, 0.2, 0.3];
       global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
         json: async () => ({
           data: [{ embedding: mockEmbedding }]
         })
