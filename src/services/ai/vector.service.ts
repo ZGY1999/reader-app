@@ -42,19 +42,7 @@ export class VectorService {
     this.chunks.set(chunkId, { id: chunkId, content, embedding });
   }
 
-  getChunkCount(): number {
-    return this.chunks.size;
-  }
-
   async search(query: string, topK: number): Promise<SearchResult[]> {
-    if (topK <= 0) {
-      throw new Error('topK must be positive');
-    }
-
-    if (!query.trim()) {
-      return [];
-    }
-
     if (this.chunks.size === 0) {
       return [];
     }
