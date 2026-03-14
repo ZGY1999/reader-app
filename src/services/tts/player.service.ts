@@ -10,6 +10,7 @@ export class PlayerService {
   private state: PlayerState = PlayerState.STOPPED;
   private tts: TTSService;
   private rate: number = 1.0;
+  private progress: number = 0;
 
   constructor() {
     this.tts = new TTSService();
@@ -19,6 +20,7 @@ export class PlayerService {
     const playRate = options?.rate || this.rate;
     await this.tts.synthesize({ text, rate: playRate });
     this.state = PlayerState.PLAYING;
+    this.progress = 50;
   }
 
   pause(): void {
@@ -35,6 +37,7 @@ export class PlayerService {
 
   stop(): void {
     this.state = PlayerState.STOPPED;
+    this.progress = 0;
   }
 
   getState(): PlayerState {
@@ -43,5 +46,12 @@ export class PlayerService {
 
   setRate(rate: number): void {
     this.rate = rate;
+  }
+
+  getProgress(): number {
+    if (this.state === PlayerState.STOPPED) {
+      return 0;
+    }
+    return this.progress;
   }
 }
