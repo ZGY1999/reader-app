@@ -70,6 +70,12 @@ export class VectorService {
     }));
   }
 
+  async addDocument(bookId: string, chunks: Array<{ id: string; content: string }>): Promise<void> {
+    for (const chunk of chunks) {
+      await this.addChunk(`${bookId}:${chunk.id}`, chunk.content);
+    }
+  }
+
   private findNearest(embedding: number[], k: number): VectorNode[] {
     const scores = Array.from(this.nodes.values()).map(node => ({
       node,

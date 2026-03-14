@@ -83,6 +83,24 @@ describe('VectorService', () => {
       const results = await vectorService.search('查询', 2);
       expect(results.length).toBeLessThanOrEqual(2);
     });
+
+    it('应该批量添加文档块', async () => {
+      const mockEmbedding = [0.1, 0.2, 0.3];
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [{ embedding: mockEmbedding }]
+        })
+      });
+
+      await vectorService.addDocument('book-1', [
+        { id: 'chunk-1', content: '内容1' },
+        { id: 'chunk-2', content: '内容2' }
+      ]);
+
+      const results = await vectorService.search('查询', 2);
+      expect(results.length).toBeLessThanOrEqual(2);
+    });
   });
 
   describe('向量维度验证', () => {
