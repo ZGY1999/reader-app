@@ -15,7 +15,8 @@ export class HighlightService {
   private readonly HIGHLIGHT_LENGTH = 15; // 每次高亮字符数
 
   updateProgress(progress: number, totalLength: number): HighlightRange {
-    const startOffset = Math.floor(progress * totalLength);
+    const clampedProgress = Math.max(0, Math.min(1, progress));
+    const startOffset = Math.floor(clampedProgress * totalLength);
     const endOffset = Math.min(startOffset + this.HIGHLIGHT_LENGTH, totalLength);
     return { startOffset, endOffset };
   }

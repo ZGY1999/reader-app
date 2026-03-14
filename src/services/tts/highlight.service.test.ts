@@ -39,4 +39,29 @@ describe('HighlightService', () => {
     expect(result.endOffset).toBeGreaterThan(result.startOffset);
     expect(result.endOffset - result.startOffset).toBeGreaterThanOrEqual(10);
   });
+
+  it('应该处理 progress < 0 的情况', () => {
+    const result = service.updateProgress(-0.5, 1000);
+    expect(result.startOffset).toBe(0);
+    expect(result.endOffset).toBeGreaterThan(0);
+  });
+
+  it('应该处理 progress > 1 的情况', () => {
+    const result = service.updateProgress(1.5, 1000);
+    expect(result.startOffset).toBeLessThanOrEqual(1000);
+    expect(result.endOffset).toBe(1000);
+  });
+
+  it('应该处理 totalLength = 0 的情况', () => {
+    const result = service.updateProgress(0.5, 0);
+    expect(result.startOffset).toBe(0);
+    expect(result.endOffset).toBe(0);
+  });
+
+  it('应该处理 totalLength < HIGHLIGHT_LENGTH 的情况', () => {
+    const result = service.updateProgress(0.5, 5);
+    expect(result.startOffset).toBeLessThanOrEqual(5);
+    expect(result.endOffset).toBeLessThanOrEqual(5);
+    expect(result.endOffset).toBeGreaterThanOrEqual(result.startOffset);
+  });
 });
