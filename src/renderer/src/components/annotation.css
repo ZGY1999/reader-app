@@ -1,0 +1,13 @@
+.annotation-underline {
+  text-decoration: underline;
+  text-decoration-color: #1890ff;
+}
+
+.annotation-wavy {
+  text-decoration: underline wavy;
+  text-decoration-color: #52c41a;
+}
+
+.annotation-highlight {
+  background-color: #fff566;
+}

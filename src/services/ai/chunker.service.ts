@@ -39,10 +39,16 @@ export class ChunkerService {
   chunkByParagraph(
     text: string,
     bookId: string,
-    chapterId: string,
+    chapterId?: string,
     chunkSize: number = 500,
     overlap: number = 50
   ): TextChunk[] {
+    if (chunkSize <= 0) {
+      throw new Error('chunkSize must be positive');
+    }
+    if (overlap < 0 || overlap >= chunkSize) {
+      throw new Error('overlap must be >= 0 and < chunkSize');
+    }
     if (!text.trim()) return [];
 
     const chunks: TextChunk[] = [];

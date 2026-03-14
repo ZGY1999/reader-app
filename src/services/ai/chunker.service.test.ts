@@ -89,7 +89,7 @@ describe('ChunkerService', () => {
 
     it('应该正确计算中文字符', () => {
       const text = '中文测试';
-      const chunks = chunker.chunkByParagraph(text, bookId, 'ch1', 10);
+      const chunks = chunker.chunkByParagraph(text, bookId, 'ch1', 10, 2);
 
       expect(chunks[0].content).toBe('中文测试');
       expect(chunks[0].endOffset).toBe(4);
@@ -118,6 +118,36 @@ describe('ChunkerService', () => {
 
       const chunks = chunker.chunkByChapter(chapters, bookId);
       expect(chunks).toHaveLength(0);
+    });
+  });
+
+  describe('参数验证', () => {
+    it('当 chunkSize <= 0 时应该抛出错误', () => {
+      const text = '这是测试文本';
+      expect(() => {
+        chunker.chunkByParagraph(text, bookId, 'ch1', 0);
+      }).toThrow('chunkSize must be positive');
+    });
+
+    it('当 overlap < 0 时应该抛出错误', () => {
+      const text = '这是测试文本';
+      expect(() => {
+        chunker.chunkByParagraph(text, bookId, 'ch1', 100, -1);
+      }).toThrow('overlap must be >= 0 and < chunkSize');
+    });
+
+    it('当 overlap >= chunkSize 时应该抛出错误', () => {
+      const text = '这是测试文本';
+      expect(() => {
+        chunker.chunkByParagraph(text, bookId, 'ch1', 100, 100);
+      }).toThrow('overlap must be >= 0 and < chunkSize');
+    });
+
+    it('当 overlap >= chunkSize 时应该抛出错误（overlap > chunkSize）', () => {
+      const text = '这是测试文本';
+      expect(() => {
+        chunker.chunkByParagraph(text, bookId, 'ch1', 100, 150);
+      }).toThrow('overlap must be >= 0 and < chunkSize');
     });
   });
 });
