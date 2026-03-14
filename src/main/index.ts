@@ -58,19 +58,71 @@ app.whenReady().then(async () => {
 
   // 播放器服务
   ipcMain.handle('player:play', async (_, text: string, options?: any) => {
-    await playerService.play(text, options);
+    try {
+      return await playerService.play(text, options);
+    } catch (error: any) {
+      console.error('Player play error:', error);
+      throw error;
+    }
   });
-  ipcMain.handle('player:pause', () => playerService.pause());
-  ipcMain.handle('player:resume', () => playerService.resume());
-  ipcMain.handle('player:stop', () => playerService.stop());
-  ipcMain.handle('player:getState', () => playerService.getState());
-  ipcMain.handle('player:getProgress', () => playerService.getProgress());
-  ipcMain.handle('player:setRate', (_, rate: number) => playerService.setRate(rate));
+  ipcMain.handle('player:pause', () => {
+    try {
+      return playerService.pause();
+    } catch (error: any) {
+      console.error('Player pause error:', error);
+      throw error;
+    }
+  });
+  ipcMain.handle('player:resume', () => {
+    try {
+      return playerService.resume();
+    } catch (error: any) {
+      console.error('Player resume error:', error);
+      throw error;
+    }
+  });
+  ipcMain.handle('player:stop', () => {
+    try {
+      return playerService.stop();
+    } catch (error: any) {
+      console.error('Player stop error:', error);
+      throw error;
+    }
+  });
+  ipcMain.handle('player:getState', () => {
+    try {
+      return playerService.getState();
+    } catch (error: any) {
+      console.error('Player getState error:', error);
+      throw error;
+    }
+  });
+  ipcMain.handle('player:getProgress', () => {
+    try {
+      return playerService.getProgress();
+    } catch (error: any) {
+      console.error('Player getProgress error:', error);
+      throw error;
+    }
+  });
+  ipcMain.handle('player:setRate', (_, rate: number) => {
+    try {
+      return playerService.setRate(rate);
+    } catch (error: any) {
+      console.error('Player setRate error:', error);
+      throw error;
+    }
+  });
 
   // 高亮服务
-  ipcMain.handle('highlight:updateProgress', (_, progress: number, totalLength: number) =>
-    highlightService.updateProgress(progress, totalLength)
-  );
+  ipcMain.handle('highlight:updateProgress', (_, progress: number, totalLength: number) => {
+    try {
+      return highlightService.updateProgress(progress, totalLength);
+    } catch (error: any) {
+      console.error('Highlight updateProgress error:', error);
+      throw error;
+    }
+  });
 
   // AI 问答服务
   ipcMain.handle('chat:ask', async (_, options) => {
