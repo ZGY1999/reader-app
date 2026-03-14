@@ -88,6 +88,8 @@ export class ChatService {
     const results = await this.vectorService.search(options.question, 3);
     const context = results.map(r => r.content).join('\n\n');
 
+    // 使用 system 角色实现 teacher 风格的提示词
+    // OpenAI API 不支持自定义角色类型，system 角色用于设置助手行为
     const systemPrompt = `你是一个专业的阅读助手。请基于提供的书籍内容回答用户问题。
 
 重要规则：
