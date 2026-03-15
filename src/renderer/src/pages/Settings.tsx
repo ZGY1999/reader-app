@@ -25,6 +25,10 @@ const defaultSettings: Required<SettingsData> = {
 
 export default function Settings() {
   const [settings, setSettings] = useState<SettingsData>(defaultSettings);
+  const aiConfigured = Boolean(settings.aiApiKey?.trim());
+  const aiBaseUrl = settings.aiBaseUrl?.trim() || defaultSettings.aiBaseUrl;
+  const ttsVoice = settings.ttsVoice?.trim() || defaultSettings.ttsVoice;
+  const ttsRate = settings.ttsRate?.trim() || defaultSettings.ttsRate;
 
   useEffect(() => {
     void loadSettings();
@@ -102,6 +106,13 @@ export default function Settings() {
 
       <section>
         <h3>AI 问书</h3>
+        <p>当前状态：{aiConfigured ? '已配置' : '未配置'}</p>
+        <p>
+          {aiConfigured
+            ? `当前将使用 ${settings.aiApiKey} 连接 ${aiBaseUrl}`
+            : `当前将使用 ${aiBaseUrl}，补充 AI API Key 后即可在阅读页提问。`}
+        </p>
+        <p>保存即生效，阅读页会立即按当前配置启用 AI 问书。</p>
         <label>
           AI API Key
           <input
@@ -125,6 +136,8 @@ export default function Settings() {
 
       <section>
         <h3>TTS 朗读</h3>
+        <p>当前配置：{ttsVoice} / {ttsRate}x</p>
+        <p>保存即生效，阅读页会立即按当前 voice 和 rate 合成朗读音频。</p>
         <label>
           TTS Voice
           <input

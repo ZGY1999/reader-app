@@ -106,4 +106,13 @@ describe('Settings route', () => {
       expect(window.electronAPI.settings.save).toHaveBeenCalledWith('ttsRate', '0.8');
     });
   });
+
+  it('shows current AI and TTS configuration summaries', async () => {
+    render(<Settings />);
+
+    expect(await screen.findByText('当前状态：已配置')).toBeDefined();
+    expect(screen.getByText('当前将使用 stored-key 连接 https://api.test.com/v1')).toBeDefined();
+    expect(screen.getByText('当前配置：en-US-JennyNeural / 1.4x')).toBeDefined();
+    expect(screen.getAllByText((_, element) => element?.textContent?.includes('保存即生效') ?? false).length).toBeGreaterThan(0);
+  });
 });

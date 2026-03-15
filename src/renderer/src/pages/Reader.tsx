@@ -36,6 +36,13 @@ interface TTSTarget {
   sourceLabel: string;
 }
 
+interface StatusCard {
+  status: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+
 export default function Reader() {
   const navigate = useNavigate();
   const currentBook = useBookStore((state) => state.currentBook);
@@ -130,6 +137,75 @@ export default function Reader() {
 
     return orderedGroups;
   }, [annotationEntries, chapterRanges]);
+
+  const aiCard = useMemo<StatusCard>(() => {
+    if (!aiConfigured) {
+      return {
+        status: '未配置',
+        description: '需要先在设置页填写 AI API Key，保存后即可在阅读页提问。',
+        actionLabel: '去设置配置 AI',
+        onAction: () => navigate('/settings'),
+      };
+    }
+
+    if (aiLoading) {
+      return {
+        status: '处理中',
+        description: '正在根据当前书籍内容生成回答和引用来源。',
+      };
+    }
+
+    if (aiError) {
+      return {
+        status: '请求失败',
+        description: aiError,
+        actionLabel: '重新提问',
+        onAction: () => void handleAskAI(),
+      };
+    }
+
+    if (aiAnswer) {
+      return {
+        status: '可使用',
+        description: '回答已生成，可继续提问，或根据引用来源回到正文核对内容。',
+      };
+    }
+
+    return {
+      status: '可使用',
+      description: '可以直接针对当前书籍提问，回答会附带对应引用来源。',
+    };
+  }, [aiAnswer, aiConfigured, aiError, aiLoading, navigate]);
+
+  const ttsCard = useMemo<StatusCard>(() => {
+    if (!ttsReady) {
+      return {
+        status: '准备中',
+        description: '正文还在加载中，加载完成后即可从当前章节、选中文本或当前标注开始朗读。',
+      };
+    }
+
+    if (ttsState.status === 'loading') {
+      return {
+        status: '处理中',
+        description: '正在合成音频并准备播放。',
+      };
+    }
+
+    if (ttsState.error) {
+      return {
+        status: '失败',
+        description: ttsState.error,
+        actionLabel: '重新尝试',
+        onAction: () => void handlePlayTTS(),
+      };
+    }
+
+    return {
+      status: '可使用',
+      description: '可直接朗读当前章节、选中文本或当前标注，设置修改后会立即生效。',
+    };
+  }, [ttsReady, ttsState.error, ttsState.status]);
 
   useEffect(() => {
     if (!currentBook) return;
@@ -680,10 +756,22 @@ export default function Reader() {
 
           <div style={{ padding: '12px 16px', borderBottom: '1px solid #ddd', background: '#fcfcfc' }}>
             <h3 style={{ margin: '0 0 8px' }}>AI 问书</h3>
-            {!aiConfigured ? (
-              <p style={{ margin: 0, color: '#8c8c8c' }}>请先在设置中配置 AI API Key 后再使用问书</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: '8px', padding: '12px 14px' }}>
+                <p style={{ margin: '0 0 6px', fontSize: '13px', color: '#595959' }}>状态：{aiCard.status}</p>
+                <p style={{ margin: 0, color: aiCard.status === '请求失败' ? '#cf1322' : '#434343', fontSize: '14px' }}>
+                  {aiCard.description}
+                </p>
+                {aiCard.actionLabel ? (
+                  <div style={{ marginTop: '10px' }}>
+                    <button type="button" onClick={aiCard.onAction}>
+                      {aiCard.actionLabel}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {aiConfigured ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <textarea
                   placeholder="针对当前书籍提问..."
                   value={aiQuestion}
@@ -715,13 +803,27 @@ export default function Reader() {
                     ) : null}
                   </div>
                 ) : null}
-              </div>
-            )}
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div style={{ padding: '12px 16px', borderBottom: '1px solid #ddd', background: '#f8fbff' }}>
             <h3 style={{ margin: '0 0 8px' }}>TTS 朗读</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ background: '#fff', border: '1px solid #d6e4ff', borderRadius: '8px', padding: '12px 14px' }}>
+                <p style={{ margin: '0 0 6px', fontSize: '13px', color: '#595959' }}>状态：{ttsCard.status}</p>
+                <p style={{ margin: 0, color: ttsCard.status === '失败' ? '#cf1322' : '#434343', fontSize: '14px' }}>
+                  {ttsCard.description}
+                </p>
+                {ttsCard.actionLabel ? (
+                  <div style={{ marginTop: '10px' }}>
+                    <button type="button" onClick={ttsCard.onAction}>
+                      {ttsCard.actionLabel}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
               <p style={{ margin: 0, color: '#595959', fontSize: '13px' }}>当前来源：{ttsState.sourceLabel}</p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {ttsState.status === 'idle' || ttsState.status === 'loading' ? (

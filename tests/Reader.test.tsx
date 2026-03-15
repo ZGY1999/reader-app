@@ -136,7 +136,7 @@ describe('Reader', () => {
     expect(screen.getByText('请选择书籍')).toBeDefined();
   });
 
-  it('shows an AI configuration hint when AI is not configured', async () => {
+  it('shows an AI guidance card when AI is not configured', async () => {
     useBookStore.getState().setCurrentBook(readingPayload.book);
 
     render(
@@ -145,7 +145,43 @@ describe('Reader', () => {
       </BrowserRouter>
     );
 
-    expect(await screen.findByText('请先在设置中配置 AI API Key 后再使用问书')).toBeDefined();
+    expect(await screen.findByText('状态：未配置')).toBeDefined();
+    expect(screen.getByText('需要先在设置页填写 AI API Key，保存后即可在阅读页提问。')).toBeDefined();
+  });
+
+  it('shows guidance cards for unavailable AI and ready TTS states', async () => {
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    expect(await screen.findByText('状态：未配置')).toBeDefined();
+    expect(screen.getByText('需要先在设置页填写 AI API Key，保存后即可在阅读页提问。')).toBeDefined();
+    expect(screen.getByRole('button', { name: '去设置配置 AI' })).toBeDefined();
+
+    await screen.findByTestId('text-renderer-ch-1');
+    expect(screen.getByText('状态：可使用')).toBeDefined();
+    expect(screen.getByText('可直接朗读当前章节、选中文本或当前标注，设置修改后会立即生效。')).toBeDefined();
+  });
+
+  it('navigates to settings from the AI guidance card', async () => {
+    window.history.pushState({}, '', '/reader');
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '去设置配置 AI' }));
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/settings');
+    });
   });
 
   it('asks AI questions and renders answer with citations', async () => {
