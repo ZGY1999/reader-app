@@ -224,7 +224,7 @@ export default function Reader() {
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>
-            <AnnotationToolbar onAnnotate={handleAnnotate} />
+            <AnnotationToolbar onAnnotate={handleAnnotate} selectionText={pendingSelection?.text} disabled={!pendingSelection} />
           </div>
 
           <div

@@ -102,6 +102,52 @@ describe('Reader', () => {
     expect(useBookStore.getState().reading).toEqual(readingPayload);
   });
 
+  it('shows visible selection feedback and clears it after creating an annotation', async () => {
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    expect(screen.getByText('先选中文本，再选择标注样式')).toBeDefined();
+    expect((screen.getByRole('button', { name: '高亮' }) as HTMLButtonElement).disabled).toBe(true);
+
+    await screen.findByTestId('text-renderer-ch-1');
+
+    const chapterText = screen.getByTestId('text-renderer-ch-1');
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      isCollapsed: false,
+      toString: () => 'Chapter',
+      getRangeAt: () => ({
+        startOffset: 0,
+        endOffset: 7,
+      }),
+    } as unknown as Selection);
+
+    fireEvent.mouseUp(chapterText);
+
+    expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('Chapter');
+    expect((screen.getByRole('button', { name: '高亮' }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: '高亮' }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.annotations.create).toHaveBeenCalledWith({
+        bookId: 'book-1',
+        startOffset: 0,
+        endOffset: 7,
+        text: 'Chapter',
+        style: 'highlight',
+      });
+    });
+
+    expect(await screen.findByTestId('annotation-ann-created')).toBeDefined();
+    expect(screen.getByText('先选中文本，再选择标注样式')).toBeDefined();
+    expect((screen.getByRole('button', { name: '高亮' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('restores saved reading progress after loading content', async () => {
     window.electronAPI.getProgress = vi.fn().mockResolvedValue({
       bookId: 'book-1',
@@ -124,43 +170,6 @@ describe('Reader', () => {
       expect(window.electronAPI.getProgress).toHaveBeenCalledWith('book-1');
       expect(scrollContainer.scrollTop).toBe(240);
     });
-  });
-
-  it('creates an annotation from the current selection and renders it', async () => {
-    useBookStore.getState().setCurrentBook(readingPayload.book);
-
-    render(
-      <BrowserRouter>
-        <Reader />
-      </BrowserRouter>
-    );
-
-    await screen.findByTestId('text-renderer-ch-1');
-
-    const chapterText = screen.getByTestId('text-renderer-ch-1');
-    vi.spyOn(window, 'getSelection').mockReturnValue({
-      isCollapsed: false,
-      toString: () => 'Chapter',
-      getRangeAt: () => ({
-        startOffset: 0,
-        endOffset: 7,
-      }),
-    } as unknown as Selection);
-
-    fireEvent.mouseUp(chapterText);
-    fireEvent.click(screen.getByRole('button', { name: '高亮' }));
-
-    await waitFor(() => {
-      expect(window.electronAPI.annotations.create).toHaveBeenCalledWith({
-        bookId: 'book-1',
-        startOffset: 0,
-        endOffset: 7,
-        text: 'Chapter',
-        style: 'highlight',
-      });
-    });
-
-    expect(await screen.findByTestId('annotation-ann-created')).toBeDefined();
   });
 
   it('deletes an existing annotation when the marked text is clicked', async () => {
