@@ -18,4 +18,26 @@ describe('BookStore', () => {
     useBookStore.getState().setCurrentBook(mockBook);
     expect(useBookStore.getState().currentBook).toEqual(mockBook);
   });
+
+  it('应该保存统一的阅读 payload', () => {
+    const reading = {
+      book: {
+        id: '1',
+        title: '测试书籍',
+        format: 'txt',
+        filePath: '/test.txt',
+      },
+      content: '正文内容',
+      chapters: [
+        {
+          id: 'ch-1',
+          title: '第一章',
+          content: '正文内容',
+        },
+      ],
+    };
+
+    useBookStore.getState().setReading(reading as any);
+    expect(useBookStore.getState().reading).toEqual(reading);
+  });
 });

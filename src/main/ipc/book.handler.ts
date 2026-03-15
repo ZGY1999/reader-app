@@ -51,7 +51,17 @@ export class BookHandler {
     if (!book) throw new Error('Book not found');
 
     const parsed = await this.parseByFormat(book.format, book.filePath);
-    return { content: parsed.content, chapters: parsed.chapters };
+    return {
+      book: {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        format: book.format,
+        filePath: book.filePath,
+      },
+      content: parsed.content,
+      chapters: parsed.chapters,
+    };
   }
 
   async saveProgress(bookId: string, chapterId: string, offset: number, progress: number) {
