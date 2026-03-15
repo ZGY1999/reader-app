@@ -29,6 +29,7 @@ export default function Settings() {
   const aiBaseUrl = settings.aiBaseUrl?.trim() || defaultSettings.aiBaseUrl;
   const ttsVoice = settings.ttsVoice?.trim() || defaultSettings.ttsVoice;
   const ttsRate = settings.ttsRate?.trim() || defaultSettings.ttsRate;
+  const ttsReady = Boolean(ttsVoice);
 
   useEffect(() => {
     void loadSettings();
@@ -105,14 +106,14 @@ export default function Settings() {
       </section>
 
       <section>
-        <h3>AI 问书</h3>
+        <h3>AI 配置</h3>
         <p>当前状态：{aiConfigured ? '已配置' : '未配置'}</p>
         <p>
           {aiConfigured
             ? `当前将使用 ${settings.aiApiKey} 连接 ${aiBaseUrl}`
-            : `当前将使用 ${aiBaseUrl}，补充 AI API Key 后即可在阅读页提问。`}
+            : `当前连接目标为 ${aiBaseUrl}，补全 AI API Key 后即可在阅读页的 AI 抽屉中提问。`}
         </p>
-        <p>保存即生效，阅读页会立即按当前配置启用 AI 问书。</p>
+        <p>保存即生效。设置页只负责配置和可用状态，阅读页通过右侧 AI 抽屉发起提问。</p>
         <label>
           AI API Key
           <input
@@ -130,14 +131,13 @@ export default function Settings() {
             onChange={(event) => handleChange('aiBaseUrl', event.target.value)}
           />
         </label>
-
-        <p>阅读功能默认可用；AI 需要配置 API Key 后启用。</p>
       </section>
 
       <section>
-        <h3>TTS 朗读</h3>
+        <h3>TTS 配置</h3>
+        <p>当前状态：{ttsReady ? '可用' : '未配置'}</p>
         <p>当前配置：{ttsVoice} / {ttsRate}x</p>
-        <p>保存即生效，阅读页会立即按当前 voice 和 rate 合成朗读音频。</p>
+        <p>保存即生效。这里展示当前将使用的语音和语速，以及 TTS 是否已准备好。</p>
         <label>
           TTS Voice
           <input
@@ -159,8 +159,6 @@ export default function Settings() {
           />
           <span>{settings.ttsRate}x</span>
         </label>
-
-        <p>默认使用 Edge TTS；如环境受限，朗读会在阅读页显示错误信息。</p>
       </section>
     </div>
   );

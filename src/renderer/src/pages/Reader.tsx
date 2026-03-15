@@ -10,16 +10,7 @@ interface PendingSelection {
   startOffset: number;
   endOffset: number;
   text: string;
-}
-
-interface AICitation {
-  chunkId: string;
-  chapterId?: string;
-  chapterTitle: string;
-  text: string;
-  startOffset: number;
-  endOffset: number;
-  score: number;
+  rect: DOMRect;
 }
 
 interface TTSState {
@@ -36,11 +27,19 @@ interface TTSTarget {
   sourceLabel: string;
 }
 
-interface StatusCard {
-  status: string;
-  description: string;
-  actionLabel?: string;
-  onAction?: () => void;
+interface AICitation {
+  chunkId: string;
+  chapterId?: string;
+  chapterTitle: string;
+  text: string;
+  startOffset: number;
+  endOffset: number;
+  score: number;
+}
+
+interface ReaderAIContext {
+  sourceLabel: string;
+  text: string;
 }
 
 export default function Reader() {
@@ -59,6 +58,7 @@ export default function Reader() {
   const [aiCitations, setAICitations] = useState<AICitation[]>([]);
   const [aiError, setAIError] = useState('');
   const [aiLoading, setAILoading] = useState(false);
+  const [showAIDrawer, setShowAIDrawer] = useState(false);
   const [ttsState, setTTSState] = useState<TTSState>({
     status: 'idle',
     sourceLabel: '当前章节',
@@ -68,6 +68,7 @@ export default function Reader() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingOffset, setPendingOffset] = useState<number | null>(null);
+  const [selectionToolbarPosition, setSelectionToolbarPosition] = useState<{ top: number; left: number } | null>(null);
   const contentContainerRef = useRef<HTMLDivElement | null>(null);
   const chapterSectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -89,7 +90,6 @@ export default function Reader() {
       };
     });
   }, [chapters, content]);
-  const ttsReady = chapterRanges.length > 0 || content.trim().length > 0;
 
   const annotationEntries = useMemo(() => {
     return annotations.map((annotation) => {
@@ -138,74 +138,40 @@ export default function Reader() {
     return orderedGroups;
   }, [annotationEntries, chapterRanges]);
 
-  const aiCard = useMemo<StatusCard>(() => {
-    if (!aiConfigured) {
+  const aiContext = useMemo<ReaderAIContext>(() => {
+    if (pendingSelection) {
       return {
-        status: '未配置',
-        description: '需要先在设置页填写 AI API Key，保存后即可在阅读页提问。',
-        actionLabel: '去设置配置 AI',
-        onAction: () => navigate('/settings'),
+        sourceLabel: '选中文本',
+        text: pendingSelection.text,
       };
     }
 
-    if (aiLoading) {
+    if (selectedAnnotation) {
       return {
-        status: '处理中',
-        description: '正在根据当前书籍内容生成回答和引用来源。',
+        sourceLabel: '当前标注',
+        text: selectedAnnotation.text,
       };
     }
 
-    if (aiError) {
+    const activeChapter = chapterRanges.find((chapter) => chapter.id === currentChapterId) ?? chapterRanges[0];
+    if (activeChapter) {
       return {
-        status: '请求失败',
-        description: aiError,
-        actionLabel: '重新提问',
-        onAction: () => void handleAskAI(),
-      };
-    }
-
-    if (aiAnswer) {
-      return {
-        status: '可使用',
-        description: '回答已生成，可继续提问，或根据引用来源回到正文核对内容。',
+        sourceLabel: activeChapter.title,
+        text: activeChapter.content,
       };
     }
 
     return {
-      status: '可使用',
-      description: '可以直接针对当前书籍提问，回答会附带对应引用来源。',
+      sourceLabel: '全文',
+      text: content,
     };
-  }, [aiAnswer, aiConfigured, aiError, aiLoading, navigate]);
+  }, [chapterRanges, content, currentChapterId, pendingSelection, selectedAnnotation]);
 
-  const ttsCard = useMemo<StatusCard>(() => {
-    if (!ttsReady) {
-      return {
-        status: '准备中',
-        description: '正文还在加载中，加载完成后即可从当前章节、选中文本或当前标注开始朗读。',
-      };
-    }
-
-    if (ttsState.status === 'loading') {
-      return {
-        status: '处理中',
-        description: '正在合成音频并准备播放。',
-      };
-    }
-
-    if (ttsState.error) {
-      return {
-        status: '失败',
-        description: ttsState.error,
-        actionLabel: '重新尝试',
-        onAction: () => void handlePlayTTS(),
-      };
-    }
-
-    return {
-      status: '可使用',
-      description: '可直接朗读当前章节、选中文本或当前标注，设置修改后会立即生效。',
-    };
-  }, [ttsReady, ttsState.error, ttsState.status]);
+  const aiPromptSuggestions = useMemo(() => [
+    '这段和上下文是什么关系？',
+    '为什么这里要强调这一点？',
+    '用更通俗的语言解释一下',
+  ], []);
 
   useEffect(() => {
     if (!currentBook) return;
@@ -235,6 +201,7 @@ export default function Reader() {
       setAICitations([]);
       setAIError('');
       setAILoading(false);
+      setShowAIDrawer(false);
       setTTSState({
         status: 'idle',
         sourceLabel: payload.chapters?.[0]?.title ?? '当前章节',
@@ -242,6 +209,7 @@ export default function Reader() {
       });
       setTTSHighlightRange(null);
       setPendingOffset(savedProgress?.offset ?? null);
+      setSelectionToolbarPosition(null);
     };
 
     void loadReading();
@@ -300,11 +268,16 @@ export default function Reader() {
   const handleSelectionCaptured = (selection: PendingSelection) => {
     setSelectedAnnotation(null);
     setPendingSelection(selection);
+    setSelectionToolbarPosition({
+      top: Math.max(selection.rect.top - 56, 16),
+      left: Math.max(selection.rect.left, 16),
+    });
   };
 
   const clearActiveAnnotationState = () => {
     setPendingSelection(null);
     setSelectedAnnotation(null);
+    setSelectionToolbarPosition(null);
   };
 
   const handleAnnotate = async (style: string) => {
@@ -321,11 +294,13 @@ export default function Reader() {
     setAnnotations((currentAnnotations) => [...currentAnnotations, result.annotation]);
     setPendingSelection(null);
     setSelectedAnnotation(null);
+    setSelectionToolbarPosition(null);
   };
 
   const handleSelectAnnotation = (annotation: Annotation) => {
     setPendingSelection(null);
     setSelectedAnnotation(annotation);
+    setSelectionToolbarPosition(null);
   };
 
   const handleDeleteAnnotationById = async (annotationId: string) => {
@@ -340,6 +315,21 @@ export default function Reader() {
     if (!selectedAnnotation) return;
 
     await handleDeleteAnnotationById(selectedAnnotation.id);
+  };
+
+  const handleCopySelection = async () => {
+    if (!pendingSelection?.text) return;
+
+    await navigator.clipboard?.writeText?.(pendingSelection.text);
+    setSelectionToolbarPosition(null);
+  };
+
+  const handleOpenAIDrawer = () => {
+    setShowAIDrawer(true);
+    setSelectionToolbarPosition(null);
+    setAIError('');
+    setAIAnswer('');
+    setAICitations([]);
   };
 
   const handleAskAI = async () => {
@@ -619,17 +609,36 @@ export default function Reader() {
   if (!currentBook) return <div>请选择书籍</div>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ display: 'flex', alignItems: 'center', padding: '10px', borderBottom: '1px solid #ddd', background: '#f5f5f5' }}>
-        <button onClick={() => navigate('/')} style={{ marginRight: '10px' }}>← 返回书架</button>
-        <h2 style={{ flex: 1, margin: 0 }}>{currentBook.title}</h2>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        background: '#f5f1e8',
+        color: '#2f2924',
+        fontFamily: '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '14px 18px',
+          borderBottom: '1px solid #e6ded2',
+          background: '#fbf8f3',
+          gap: '12px',
+        }}
+      >
+        <button onClick={() => navigate('/')} style={{ marginRight: '4px' }}>← 返回书架</button>
+        <h2 style={{ flex: 1, margin: 0, fontSize: '18px', fontWeight: 700 }}>{currentBook.title}</h2>
         <input
           type="text"
           placeholder="搜索..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ marginRight: '10px', padding: '5px' }}
+          style={{ marginRight: '4px', padding: '8px 10px' }}
         />
+        <button type="button" onClick={handleOpenAIDrawer}>工具</button>
         <button onClick={() => navigate('/settings')}>设置</button>
       </div>
 
@@ -742,152 +751,184 @@ export default function Reader() {
           </div>
         )}
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>
-            <AnnotationToolbar
-              onAnnotate={handleAnnotate}
-              selectionText={pendingSelection?.text}
-              selectedAnnotationText={selectedAnnotation?.text}
-              disabled={!pendingSelection || !!selectedAnnotation}
-              onDeleteAnnotation={selectedAnnotation ? handleDeleteAnnotation : undefined}
-              onClearActive={pendingSelection || selectedAnnotation ? clearActiveAnnotationState : undefined}
-            />
-          </div>
-
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid #ddd', background: '#fcfcfc' }}>
-            <h3 style={{ margin: '0 0 8px' }}>AI 问书</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: '8px', padding: '12px 14px' }}>
-                <p style={{ margin: '0 0 6px', fontSize: '13px', color: '#595959' }}>状态：{aiCard.status}</p>
-                <p style={{ margin: 0, color: aiCard.status === '请求失败' ? '#cf1322' : '#434343', fontSize: '14px' }}>
-                  {aiCard.description}
-                </p>
-                {aiCard.actionLabel ? (
-                  <div style={{ marginTop: '10px' }}>
-                    <button type="button" onClick={aiCard.onAction}>
-                      {aiCard.actionLabel}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              {aiConfigured ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <textarea
-                  placeholder="针对当前书籍提问..."
-                  value={aiQuestion}
-                  onChange={(event) => setAIQuestion(event.target.value)}
-                  rows={3}
-                  style={{ width: '100%', resize: 'vertical' }}
+        <div style={{ flex: 1, display: 'flex', minWidth: 0, position: 'relative', background: '#fffdf9' }}>
+          <div style={{ flex: showAIDrawer ? '1 1 calc(100% - 420px)' : '1 1 100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div
+              ref={contentContainerRef}
+              data-testid="reader-scroll-container"
+              onScroll={handleContentScroll}
+              style={{ flex: 1, overflowY: 'auto' }}
+            >
+              {chapterRanges.length > 0 ? (
+                <div style={{ padding: '20px' }}>
+                  {chapterRanges.map((chapter) => (
+                    <section
+                      key={chapter.id}
+                      ref={(element) => {
+                        chapterSectionRefs.current[chapter.id] = element;
+                      }}
+                      data-testid={`chapter-section-${chapter.id}`}
+                      style={{ marginBottom: '32px' }}
+                    >
+                      <h3 style={{ margin: '0 0 12px', color: '#3a332d' }}>{chapter.title}</h3>
+                      <TextRenderer
+                        testId={`text-renderer-${chapter.id}`}
+                        content={chapter.content}
+                        offsetBase={chapter.startOffset}
+                        annotations={getChapterAnnotations(chapter.id)}
+                        activeAnnotationId={selectedAnnotation?.id}
+                        highlightRange={getChapterTTSHighlight(chapter.id)}
+                        onAnnotate={handleSelectionCaptured}
+                        onSelectAnnotation={handleSelectAnnotation}
+                        onClearSelection={clearActiveAnnotationState}
+                      />
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <TextRenderer
+                  content={content}
+                  activeAnnotationId={selectedAnnotation?.id}
+                  highlightRange={ttsHighlightRange}
+                  onAnnotate={handleSelectionCaptured}
+                  onSelectAnnotation={handleSelectAnnotation}
+                  onClearSelection={clearActiveAnnotationState}
                 />
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="button" disabled={!aiQuestion.trim() || aiLoading} onClick={() => void handleAskAI()}>
-                    {aiLoading ? '回答中...' : '发送提问'}
-                  </button>
-                </div>
-                {aiError ? <p role="alert" style={{ margin: 0, color: '#cf1322' }}>{aiError}</p> : null}
-                {aiAnswer ? (
-                  <div data-testid="ai-answer" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <p style={{ margin: 0, color: '#1f1f1f' }}>{aiAnswer}</p>
-                    {aiCitations.length > 0 ? (
-                      <div>
-                        <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '6px' }}>引用来源</div>
-                        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          {aiCitations.map((citation) => (
-                            <li key={citation.chunkId} style={{ background: '#fff', border: '1px solid #eee', borderRadius: '6px', padding: '8px 10px' }}>
-                              <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>{citation.chapterTitle}</div>
-                              <div style={{ fontSize: '13px', color: '#1f1f1f' }}>{citation.text}</div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                </div>
-              ) : null}
+              )}
             </div>
           </div>
 
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid #ddd', background: '#f8fbff' }}>
-            <h3 style={{ margin: '0 0 8px' }}>TTS 朗读</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ background: '#fff', border: '1px solid #d6e4ff', borderRadius: '8px', padding: '12px 14px' }}>
-                <p style={{ margin: '0 0 6px', fontSize: '13px', color: '#595959' }}>状态：{ttsCard.status}</p>
-                <p style={{ margin: 0, color: ttsCard.status === '失败' ? '#cf1322' : '#434343', fontSize: '14px' }}>
-                  {ttsCard.description}
-                </p>
-                {ttsCard.actionLabel ? (
-                  <div style={{ marginTop: '10px' }}>
-                    <button type="button" onClick={ttsCard.onAction}>
-                      {ttsCard.actionLabel}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              <p style={{ margin: 0, color: '#595959', fontSize: '13px' }}>当前来源：{ttsState.sourceLabel}</p>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {ttsState.status === 'idle' || ttsState.status === 'loading' ? (
-                  <button type="button" disabled={ttsState.status === 'loading' || !ttsReady} onClick={() => void handlePlayTTS()}>
-                    {ttsState.status === 'loading' ? '准备中...' : '开始朗读'}
-                  </button>
-                ) : null}
-                {ttsState.status === 'playing' ? (
-                  <button type="button" onClick={handlePauseTTS}>暂停</button>
-                ) : null}
-                {ttsState.status === 'paused' ? (
-                  <button type="button" onClick={() => void handleResumeTTS()}>继续</button>
-                ) : null}
-                {ttsState.status === 'playing' || ttsState.status === 'paused' ? (
-                  <button type="button" onClick={handleStopTTS}>停止</button>
-                ) : null}
-              </div>
-              {ttsState.error ? <p role="alert" style={{ margin: 0, color: '#cf1322' }}>{ttsState.error}</p> : null}
-            </div>
-          </div>
+          {pendingSelection && selectionToolbarPosition ? (
+            <AnnotationToolbar
+              mode="selection"
+              onAnnotate={handleAnnotate}
+              onCopySelection={() => void handleCopySelection()}
+              onAskAI={handleOpenAIDrawer}
+              style={{
+                position: 'absolute',
+                top: `${selectionToolbarPosition.top}px`,
+                left: `${selectionToolbarPosition.left}px`,
+                zIndex: 20,
+              }}
+            />
+          ) : null}
 
-          <div
-            ref={contentContainerRef}
-            data-testid="reader-scroll-container"
-            onScroll={handleContentScroll}
-            style={{ flex: 1, overflowY: 'auto' }}
-          >
-            {chapterRanges.length > 0 ? (
-              <div style={{ padding: '20px' }}>
-                {chapterRanges.map((chapter) => (
-                  <section
-                    key={chapter.id}
-                    ref={(element) => {
-                      chapterSectionRefs.current[chapter.id] = element;
-                    }}
-                    data-testid={`chapter-section-${chapter.id}`}
-                    style={{ marginBottom: '32px' }}
+          {selectedAnnotation ? (
+            <AnnotationToolbar
+              mode="annotation"
+              onAnnotate={handleAnnotate}
+              onDeleteAnnotation={() => void handleDeleteAnnotation()}
+              onClearActive={clearActiveAnnotationState}
+              style={{
+                position: 'absolute',
+                top: '24px',
+                right: showAIDrawer ? '444px' : '24px',
+                zIndex: 20,
+              }}
+            />
+          ) : null}
+
+          {showAIDrawer ? (
+            <aside
+              data-testid="ai-drawer"
+              style={{
+                width: '428px',
+                borderLeft: '1px solid #e7dfd3',
+                background: '#f7f5f1',
+                boxShadow: '-16px 0 28px rgba(0, 0, 0, 0.06)',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div style={{ padding: '20px 22px 14px', borderBottom: '1px solid #ece4d8' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontSize: '22px', fontWeight: 700, color: '#2f2924', marginBottom: '4px' }}>AI 问书</div>
+                    <div style={{ fontSize: '12px', color: '#8a8177', marginBottom: '4px' }}>{currentBook.title}</div>
+                    <div style={{ fontSize: '13px', color: '#5f574f' }}>当前来源：{aiContext.sourceLabel}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAIDrawer(false)}
+                    style={{ padding: '6px 10px', border: '1px solid #d7cec0', borderRadius: '999px', background: '#fff', color: '#7d7469' }}
                   >
-                    <h3 style={{ margin: '0 0 12px' }}>{chapter.title}</h3>
-                    <TextRenderer
-                      testId={`text-renderer-${chapter.id}`}
-                      content={chapter.content}
-                      offsetBase={chapter.startOffset}
-                      annotations={getChapterAnnotations(chapter.id)}
-                      activeAnnotationId={selectedAnnotation?.id}
-                      highlightRange={getChapterTTSHighlight(chapter.id)}
-                      onAnnotate={handleSelectionCaptured}
-                      onSelectAnnotation={handleSelectAnnotation}
-                      onClearSelection={clearActiveAnnotationState}
-                    />
-                  </section>
-                ))}
+                    关闭
+                  </button>
+                </div>
               </div>
-            ) : (
-              <TextRenderer
-                content={content}
-                activeAnnotationId={selectedAnnotation?.id}
-                highlightRange={ttsHighlightRange}
-                onAnnotate={handleSelectionCaptured}
-                onSelectAnnotation={handleSelectAnnotation}
-                onClearSelection={clearActiveAnnotationState}
-              />
-            )}
-          </div>
+
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: 0 }}>
+                <div style={{ background: '#dceeff', border: '1px solid #c9def4', borderRadius: '14px', padding: '14px 16px', color: '#31404d', lineHeight: 1.75, fontSize: '14px', maxHeight: '140px', overflowY: 'auto' }}>
+                  {aiContext.text || '当前没有可用文本上下文。'}
+                </div>
+
+                {!aiConfigured ? (
+                  <div style={{ background: '#fff', border: '1px solid #e8dfd3', borderRadius: '16px', padding: '16px', color: '#5a524a', lineHeight: 1.8 }}>
+                    <div style={{ fontWeight: 600, marginBottom: '8px' }}>AI 当前未配置</div>
+                    <div style={{ marginBottom: '12px' }}>请先在设置页填写 API Key 和 Base URL。设置页只负责配置和状态，保存后这里会立即可用。</div>
+                    <button type="button" onClick={() => navigate('/settings')}>去设置</button>
+                  </div>
+                ) : (
+                  <>
+                    <div data-testid="ai-answer" style={{ background: '#fff', border: '1px solid #e8dfd3', borderRadius: '16px', padding: '18px', flex: 1, minHeight: '360px', display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
+                      <div style={{ fontSize: '13px', color: '#7d7469' }}>回答</div>
+                      {aiLoading ? (
+                        <div style={{ color: '#5c544c', lineHeight: 1.9 }}>思考中...</div>
+                      ) : aiAnswer ? (
+                        <>
+                          <div style={{ color: '#39322c', lineHeight: 1.92, fontSize: '15px' }}>{aiAnswer}</div>
+                          {aiCitations.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {aiCitations.map((citation) => (
+                                <div key={citation.chunkId} style={{ borderTop: '1px solid #f0e8dd', paddingTop: '8px' }}>
+                                  <div style={{ fontSize: '12px', color: '#8a8177', marginBottom: '4px' }}>{citation.chapterTitle}</div>
+                                  <div style={{ fontSize: '14px', lineHeight: 1.8, color: '#4b443d' }}>{citation.text}</div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <div style={{ color: '#7d7469', lineHeight: 1.9 }}>从当前选中文本、当前标注或当前章节发起提问，回答会显示在这里。</div>
+                      )}
+                      {aiError ? <div role="alert" style={{ color: '#cf1322' }}>{aiError}</div> : null}
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {aiPromptSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          onClick={() => setAIQuestion(suggestion)}
+                          style={{ padding: '10px 14px', borderRadius: '999px', background: '#fff', border: '1px solid #e6ddd2', color: '#5c544c', fontSize: '13px' }}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                      <textarea
+                        placeholder="提出问题，获得来自书籍的解答..."
+                        value={aiQuestion}
+                        onChange={(event) => setAIQuestion(event.target.value)}
+                        rows={3}
+                        style={{ flex: 1, resize: 'none', background: '#fff', border: '1px solid #d7cec0', borderRadius: '16px', padding: '14px 16px', color: '#3a332d' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleAskAI()}
+                        disabled={!aiQuestion.trim() || aiLoading}
+                        style={{ minWidth: '82px', height: '42px', borderRadius: '999px', border: 'none', background: '#44a6ff', color: '#fff', padding: '0 16px', fontWeight: 600 }}
+                      >
+                        发送问题
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </aside>
+          ) : null}
         </div>
       </div>
 

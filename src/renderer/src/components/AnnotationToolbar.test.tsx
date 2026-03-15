@@ -3,55 +3,52 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import AnnotationToolbar from './AnnotationToolbar';
 
 describe('AnnotationToolbar', () => {
-  it('renders disabled annotation buttons without an active selection', () => {
+  it('renders selection actions and calls the corresponding callbacks', () => {
     const onAnnotate = vi.fn();
-    render(<AnnotationToolbar onAnnotate={onAnnotate} disabled />);
+    const onCopySelection = vi.fn();
+    const onAskAI = vi.fn();
 
-    expect(screen.getByText('\u5148\u9009\u4e2d\u6587\u672c\uff0c\u518d\u9009\u62e9\u6807\u6ce8\u6837\u5f0f')).toBeDefined();
-    expect((screen.getByRole('button', { name: '\u76f4\u7ebf' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: '\u6ce2\u6d6a\u7ebf' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: '\u9ad8\u4eae' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByRole('button', { name: '\u5220\u9664\u6807\u6ce8' })).toBeNull();
+    render(
+      <AnnotationToolbar
+        mode="selection"
+        onAnnotate={onAnnotate}
+        onCopySelection={onCopySelection}
+        onAskAI={onAskAI}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '复制' }));
+    fireEvent.click(screen.getByRole('button', { name: '马克笔' }));
+    fireEvent.click(screen.getByRole('button', { name: '波浪线' }));
+    fireEvent.click(screen.getByRole('button', { name: '直线' }));
+    fireEvent.click(screen.getByRole('button', { name: 'AI问书' }));
+
+    expect(onCopySelection).toHaveBeenCalledTimes(1);
+    expect(onAnnotate).toHaveBeenNthCalledWith(1, 'highlight');
+    expect(onAnnotate).toHaveBeenNthCalledWith(2, 'wavy');
+    expect(onAnnotate).toHaveBeenNthCalledWith(3, 'underline');
+    expect(onAskAI).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the selected text and calls back with the chosen style', () => {
-    const onAnnotate = vi.fn();
-    render(<AnnotationToolbar onAnnotate={onAnnotate} selectionText="Chapter" />);
-
-    expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('Chapter');
-
-    fireEvent.click(screen.getByRole('button', { name: '\u76f4\u7ebf' }));
-    expect(onAnnotate).toHaveBeenCalledWith('underline');
-
-    fireEvent.click(screen.getByRole('button', { name: '\u6ce2\u6d6a\u7ebf' }));
-    expect(onAnnotate).toHaveBeenCalledWith('wavy');
-
-    fireEvent.click(screen.getByRole('button', { name: '\u9ad8\u4eae' }));
-    expect(onAnnotate).toHaveBeenCalledWith('highlight');
-  });
-
-  it('shows explicit delete actions when an annotation is selected', () => {
+  it('renders annotation management actions in annotation mode', () => {
     const onAnnotate = vi.fn();
     const onDeleteAnnotation = vi.fn();
     const onClearActive = vi.fn();
 
     render(
       <AnnotationToolbar
+        mode="annotation"
         onAnnotate={onAnnotate}
-        selectedAnnotationText="Marked text"
-        disabled
         onDeleteAnnotation={onDeleteAnnotation}
         onClearActive={onClearActive}
       />
     );
 
-    expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('Marked text');
-    expect((screen.getByRole('button', { name: '\u76f4\u7ebf' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: '复制' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '删除标注' }));
+    fireEvent.click(screen.getByRole('button', { name: '取消选中' }));
 
-    fireEvent.click(screen.getByRole('button', { name: '\u5220\u9664\u6807\u6ce8' }));
     expect(onDeleteAnnotation).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole('button', { name: '\u53d6\u6d88\u9009\u4e2d' }));
     expect(onClearActive).toHaveBeenCalledTimes(1);
   });
 });

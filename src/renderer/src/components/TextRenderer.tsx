@@ -9,7 +9,7 @@ interface TextRendererProps {
   testId?: string;
   activeAnnotationId?: string;
   highlightRange?: { startOffset: number; endOffset: number } | null;
-  onAnnotate?: (data: { startOffset: number; endOffset: number; text: string }) => void;
+  onAnnotate?: (data: { startOffset: number; endOffset: number; text: string; rect: DOMRect }) => void;
   onSelectAnnotation?: (annotation: Annotation) => void;
   onClearSelection?: () => void;
 }
@@ -37,8 +37,9 @@ export default function TextRenderer({
     const range = selection.getRangeAt(0);
     const startOffset = offsetBase + range.startOffset;
     const endOffset = offsetBase + range.endOffset;
+    const rect = range.getBoundingClientRect();
 
-    onAnnotate({ startOffset, endOffset, text });
+    onAnnotate({ startOffset, endOffset, text, rect });
   };
 
   const renderContent = () => {

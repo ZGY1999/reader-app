@@ -1,5 +1,5 @@
 ﻿import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import Reader from '../src/renderer/src/pages/Reader';
 import { useBookStore } from '../src/renderer/src/store';
@@ -136,7 +136,7 @@ describe('Reader', () => {
     expect(screen.getByText('请选择书籍')).toBeDefined();
   });
 
-  it('shows an AI guidance card when AI is not configured', async () => {
+  it('keeps the reading page free of persistent AI and TTS panels', async () => {
     useBookStore.getState().setCurrentBook(readingPayload.book);
 
     render(
@@ -144,31 +144,14 @@ describe('Reader', () => {
         <Reader />
       </BrowserRouter>
     );
-
-    expect(await screen.findByText('状态：未配置')).toBeDefined();
-    expect(screen.getByText('需要先在设置页填写 AI API Key，保存后即可在阅读页提问。')).toBeDefined();
-  });
-
-  it('shows guidance cards for unavailable AI and ready TTS states', async () => {
-    useBookStore.getState().setCurrentBook(readingPayload.book);
-
-    render(
-      <BrowserRouter>
-        <Reader />
-      </BrowserRouter>
-    );
-
-    expect(await screen.findByText('状态：未配置')).toBeDefined();
-    expect(screen.getByText('需要先在设置页填写 AI API Key，保存后即可在阅读页提问。')).toBeDefined();
-    expect(screen.getByRole('button', { name: '去设置配置 AI' })).toBeDefined();
 
     await screen.findByTestId('text-renderer-ch-1');
-    expect(screen.getByText('状态：可使用')).toBeDefined();
-    expect(screen.getByText('可直接朗读当前章节、选中文本或当前标注，设置修改后会立即生效。')).toBeDefined();
+    expect(screen.queryByText('AI 问书')).toBeNull();
+    expect(screen.queryByText('TTS 朗读')).toBeNull();
+    expect(screen.getByRole('button', { name: '工具' })).toBeDefined();
   });
 
-  it('navigates to settings from the AI guidance card', async () => {
-    window.history.pushState({}, '', '/reader');
+  it('shows a floating selection toolbar with AI entry after selecting text', async () => {
     useBookStore.getState().setCurrentBook(readingPayload.book);
 
     render(
@@ -177,14 +160,32 @@ describe('Reader', () => {
       </BrowserRouter>
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: '去设置配置 AI' }));
+    await screen.findByTestId('text-renderer-ch-1');
+    const chapterText = screen.getByTestId('text-renderer-ch-1');
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      isCollapsed: false,
+      toString: () => 'Chapter',
+      getRangeAt: () => ({
+        startOffset: 0,
+        endOffset: 7,
+        getBoundingClientRect: () => ({
+          top: 120,
+          left: 240,
+          width: 120,
+          height: 22,
+          right: 360,
+          bottom: 142,
+        }),
+      }),
+    } as unknown as Selection);
 
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/settings');
-    });
+    fireEvent.mouseUp(chapterText);
+
+    expect(screen.getByTestId('selection-toolbar')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'AI问书' })).toBeDefined();
   });
 
-  it('asks AI questions and renders answer with citations', async () => {
+  it('opens the AI drawer from the floating toolbar and asks questions there', async () => {
     window.electronAPI.ai.getStatus = vi.fn().mockResolvedValue({ configured: true });
     window.electronAPI.ai.ask = vi.fn().mockResolvedValue({
       success: true,
@@ -208,10 +209,35 @@ describe('Reader', () => {
       </BrowserRouter>
     );
 
-    fireEvent.change(await screen.findByPlaceholderText('针对当前书籍提问...'), {
+    await screen.findByTestId('text-renderer-ch-1');
+    const chapterText = screen.getByTestId('text-renderer-ch-1');
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      isCollapsed: false,
+      toString: () => 'Chapter',
+      getRangeAt: () => ({
+        startOffset: 0,
+        endOffset: 7,
+        getBoundingClientRect: () => ({
+          top: 120,
+          left: 240,
+          width: 120,
+          height: 22,
+          right: 360,
+          bottom: 142,
+        }),
+      }),
+    } as unknown as Selection);
+
+    fireEvent.mouseUp(chapterText);
+    fireEvent.click(screen.getByRole('button', { name: 'AI问书' }));
+
+    expect(await screen.findByTestId('ai-drawer')).toBeDefined();
+    expect(screen.getByText('当前来源：选中文本')).toBeDefined();
+
+    fireEvent.change(screen.getByPlaceholderText('提出问题，获得来自书籍的解答...'), {
       target: { value: 'What is chapter one about?' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '发送提问' }));
+    fireEvent.click(screen.getByRole('button', { name: '发送问题' }));
 
     await waitFor(() => {
       expect(window.electronAPI.ai.ask).toHaveBeenCalledWith({
@@ -276,9 +302,6 @@ describe('Reader', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText('先选中文本，再选择标注样式')).toBeDefined();
-    expect((screen.getByRole('button', { name: '高亮' }) as HTMLButtonElement).disabled).toBe(true);
-
     await screen.findByTestId('text-renderer-ch-1');
 
     const chapterText = screen.getByTestId('text-renderer-ch-1');
@@ -288,29 +311,36 @@ describe('Reader', () => {
       getRangeAt: () => ({
         startOffset: 0,
         endOffset: 7,
+        getBoundingClientRect: () => ({
+          top: 120,
+          left: 240,
+          width: 120,
+          height: 22,
+          right: 360,
+          bottom: 142,
+        }),
       }),
     } as unknown as Selection);
 
     fireEvent.mouseUp(chapterText);
 
-    expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('Chapter');
-    expect((screen.getByRole('button', { name: '高亮' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId('selection-toolbar')).toBeDefined();
+    expect(screen.getByRole('button', { name: '马克笔' })).toBeDefined();
 
-    fireEvent.click(screen.getByRole('button', { name: '高亮' }));
+    fireEvent.click(screen.getByRole('button', { name: '马克笔' }));
 
     await waitFor(() => {
-      expect(window.electronAPI.annotations.create).toHaveBeenCalledWith({
+      expect(window.electronAPI.annotations.create).toHaveBeenCalledWith(expect.objectContaining({
         bookId: 'book-1',
         startOffset: 0,
         endOffset: 7,
         text: 'Chapter',
         style: 'highlight',
-      });
+      }));
     });
 
     expect(await screen.findByTestId('annotation-ann-created')).toBeDefined();
-    expect(screen.getByText('先选中文本，再选择标注样式')).toBeDefined();
-    expect((screen.getByRole('button', { name: '高亮' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTestId('selection-toolbar')).toBeNull();
   });
 
   it('restores saved reading progress after loading content', async () => {
@@ -359,7 +389,7 @@ describe('Reader', () => {
 
     fireEvent.click(await screen.findByTestId('annotation-ann-1'));
 
-    expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('已选中标注');
+    expect(screen.getByRole('button', { name: '删除标注' })).toBeDefined();
     expect(screen.getByTestId('annotation-ann-1').className).toContain('annotation-active');
     expect(window.electronAPI.annotations.delete).not.toHaveBeenCalled();
 
@@ -397,7 +427,7 @@ describe('Reader', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '取消选中' }));
 
-    expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('先选中文本');
+    expect(screen.queryByRole('button', { name: '删除标注' })).toBeNull();
     expect(screen.getByTestId('annotation-ann-1').className).not.toContain('annotation-active');
   });
 
@@ -434,7 +464,7 @@ describe('Reader', () => {
     expect(scrollContainer.scrollTop).toBe(516);
     expect(screen.getByRole('button', { name: 'Chapter 2' }).getAttribute('aria-current')).toBe('true');
     expect(screen.getByTestId('annotation-ann-2').className).toContain('annotation-active');
-    expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('已选中标注');
+    expect(screen.getByRole('button', { name: '删除标注' })).toBeDefined();
     expect((screen.getByTestId('annotation-focus-ann-2') as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -524,59 +554,20 @@ describe('Reader', () => {
     expect(screen.getByRole('button', { name: 'Chapter 2' }).getAttribute('aria-current')).toBe('true');
   });
 
-  it('plays TTS for the current chapter and exposes playback controls', async () => {
+  it('opens the AI drawer from the header tool button with current chapter context', async () => {
     useBookStore.getState().setCurrentBook(readingPayload.book);
 
-    const { container } = render(
+    render(
       <BrowserRouter>
         <Reader />
       </BrowserRouter>
     );
 
     await screen.findByTestId('text-renderer-ch-1');
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '开始朗读' }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: '工具' }));
 
-    await waitFor(() => {
-      expect(window.electronAPI.tts.synthesize).toHaveBeenCalledWith({
-        text: 'Chapter one content',
-        voice: 'en-US-JennyNeural',
-        rate: 1.4,
-      });
-    });
-
-    expect(await screen.findByText('当前来源：Chapter 1')).toBeDefined();
-    expect(screen.getByRole('button', { name: '暂停' })).toBeDefined();
-
-    const audio = MockAudio.instances[0];
-    await act(async () => {
-      audio.currentTime = 5;
-      audio.emit('timeupdate');
-    });
-
-    await waitFor(() => {
-      expect(container.querySelector('.tts-highlight')).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '暂停' }));
-    });
-    expect(await screen.findByRole('button', { name: '继续' })).toBeDefined();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '继续' }));
-    });
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '暂停' })).toBeDefined();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '停止' }));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '开始朗读' })).toBeDefined();
-    });
+    expect(await screen.findByTestId('ai-drawer')).toBeDefined();
+    expect(screen.getByText('当前来源：Chapter 1')).toBeDefined();
+    expect(screen.queryByText('TTS 朗读')).toBeNull();
   });
 });

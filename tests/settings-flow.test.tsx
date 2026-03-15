@@ -5,7 +5,8 @@ import Settings from '../src/renderer/src/pages/Settings';
 
 describe('Settings route', () => {
   beforeEach(() => {
-    window.history.pushState({}, '', '/settings');
+    window.history.pushState({}, '', '/');
+    window.location.hash = '#/settings';
     document.documentElement.removeAttribute('data-theme');
     document.documentElement.style.removeProperty('--font-size');
     document.documentElement.style.removeProperty('--line-height');
@@ -13,7 +14,7 @@ describe('Settings route', () => {
 
     window.electronAPI = {
       importBook: vi.fn(),
-      getBooks: vi.fn(),
+      getBooks: vi.fn().mockResolvedValue([]),
       getBook: vi.fn(),
       getBookContent: vi.fn(),
       saveProgress: vi.fn(),
@@ -21,6 +22,11 @@ describe('Settings route', () => {
       ai: {
         getStatus: vi.fn(),
         ask: vi.fn(),
+      },
+      annotations: {
+        create: vi.fn(),
+        list: vi.fn(),
+        delete: vi.fn(),
       },
       settings: {
         save: vi.fn().mockResolvedValue(undefined),
@@ -107,12 +113,16 @@ describe('Settings route', () => {
     });
   });
 
-  it('shows current AI and TTS configuration summaries', async () => {
+  it('shows AI and TTS configuration summaries without embedding reading tools', async () => {
     render(<Settings />);
 
     expect(await screen.findByText('当前状态：已配置')).toBeDefined();
     expect(screen.getByText('当前将使用 stored-key 连接 https://api.test.com/v1')).toBeDefined();
     expect(screen.getByText('当前配置：en-US-JennyNeural / 1.4x')).toBeDefined();
-    expect(screen.getAllByText((_, element) => element?.textContent?.includes('保存即生效') ?? false).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/保存即生效/).length).toBeGreaterThan(0);
+    expect(screen.getByText('AI 配置')).toBeDefined();
+    expect(screen.getByText('TTS 配置')).toBeDefined();
+    expect(screen.queryByPlaceholderText('提出问题，获得来自书籍的解答...')).toBeNull();
+    expect(screen.queryByRole('button', { name: '发送问题' })).toBeNull();
   });
 });
