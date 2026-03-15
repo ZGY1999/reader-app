@@ -45,6 +45,18 @@ export default function Reader() {
     });
   }, [chapters, content]);
 
+  const annotationEntries = useMemo(() => {
+    return annotations.map((annotation) => {
+      const chapter = chapterRanges.find((item) => annotation.startOffset >= item.startOffset && annotation.endOffset <= item.endOffset);
+
+      return {
+        ...annotation,
+        chapterId: chapter?.id ?? null,
+        chapterTitle: chapter?.title ?? '全文',
+      };
+    });
+  }, [annotations, chapterRanges]);
+
   useEffect(() => {
     if (!currentBook) return;
 
@@ -176,6 +188,32 @@ export default function Reader() {
     setCurrentChapterId(chapterId);
   };
 
+  const handleAnnotationJump = (annotation: Annotation) => {
+    const scrollContainer = contentContainerRef.current;
+    if (!scrollContainer) return;
+
+    const chapter = chapterRanges.find((item) => annotation.startOffset >= item.startOffset && annotation.endOffset <= item.endOffset);
+    const section = chapter ? chapterSectionRefs.current[chapter.id] : null;
+    const annotationElement = document.querySelector(`[data-testid="annotation-${annotation.id}"]`) as HTMLElement | null;
+
+    setPendingSelection(null);
+    setSelectedAnnotation(annotation);
+
+    if (chapter) {
+      setCurrentChapterId(chapter.id);
+    }
+
+    if (section) {
+      const nextOffset = Math.max(section.offsetTop + (annotationElement?.offsetTop ?? 0) - 24, 0);
+      scrollContainer.scrollTop = nextOffset;
+      return;
+    }
+
+    if (annotationElement) {
+      scrollContainer.scrollTop = Math.max(annotationElement.offsetTop - 24, 0);
+    }
+  };
+
   const getChapterAnnotations = (chapterId: string) => {
     const chapter = chapterRanges.find((item) => item.id === chapterId);
     if (!chapter) return [];
@@ -236,6 +274,39 @@ export default function Reader() {
             ) : (
               <p>无章节信息</p>
             )}
+
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #eee' }}>
+              <h3 style={{ margin: '0 0 8px' }}>标注</h3>
+              {annotationEntries.length > 0 ? (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {annotationEntries.map((annotation) => (
+                    <li key={annotation.id}>
+                      <button
+                        type="button"
+                        data-testid={`annotation-link-${annotation.id}`}
+                        onClick={() => handleAnnotationJump(annotation)}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          background: selectedAnnotation?.id === annotation.id ? '#fff1b8' : '#fafafa',
+                          border: '1px solid #e8e8e8',
+                          borderRadius: '6px',
+                          padding: '8px 10px',
+                        }}
+                      >
+                        <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>{annotation.chapterTitle}</div>
+                        <div style={{ fontSize: '13px', color: '#1f1f1f', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {annotation.text}
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ margin: 0, color: '#8c8c8c', fontSize: '13px' }}>当前书籍还没有标注</p>
+              )}
+            </div>
           </div>
         )}
 

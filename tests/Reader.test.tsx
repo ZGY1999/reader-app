@@ -236,6 +236,42 @@ describe('Reader', () => {
     expect(screen.getByTestId('annotation-ann-1').className).not.toContain('annotation-active');
   });
 
+  it('jumps to the selected annotation from the sidebar list', async () => {
+    window.electronAPI.annotations.list = vi.fn().mockResolvedValue([
+      {
+        id: 'ann-2',
+        bookId: 'book-1',
+        startOffset: 21,
+        endOffset: 28,
+        text: 'Chapter',
+        style: 'highlight',
+      },
+    ]);
+
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    const scrollContainer = await screen.findByTestId('reader-scroll-container');
+    const chapterTwoSection = await screen.findByTestId('chapter-section-ch-2');
+    const targetAnnotation = await screen.findByTestId('annotation-ann-2');
+
+    Object.defineProperty(chapterTwoSection, 'offsetTop', { value: 480, configurable: true });
+    Object.defineProperty(targetAnnotation, 'offsetTop', { value: 60, configurable: true });
+    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true, configurable: true });
+
+    fireEvent.click(screen.getByTestId('annotation-link-ann-2'));
+
+    expect(scrollContainer.scrollTop).toBe(516);
+    expect(screen.getByRole('button', { name: 'Chapter 2' }).getAttribute('aria-current')).toBe('true');
+    expect(screen.getByTestId('annotation-ann-2').className).toContain('annotation-active');
+    expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('已选中标注');
+  });
+
   it('jumps to a chapter when the sidebar entry is clicked', async () => {
     useBookStore.getState().setCurrentBook(readingPayload.book);
 
