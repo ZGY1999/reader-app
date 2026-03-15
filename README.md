@@ -1,123 +1,94 @@
-# 智能阅读器 Reader App
+﻿# Reader App
 
-一款基于Electron的智能阅读应用，支持多种格式、AI问答、TTS朗读等功能。
+一个基于 Electron + React + TypeScript 的桌面阅读器项目。
 
-## ✨ 功能特性
+当前主线目标是 `v0.1 阅读底座公开试用版`：先把 `TXT / EPUB / PDF` 的导入、阅读、设置、进度恢复做稳，再逐步补齐标注、AI 和 TTS。
 
-### 📚 多格式支持
-- TXT文本文件（自动编码检测：UTF-8、GBK、GB2312）
-- EPUB电子书
-- PDF文档
+## 当前状态
 
-### 🎯 核心功能
-- **智能阅读界面**：目录导航、章节跳转
-- **标注系统**：高亮、下划线、波浪线标注
-- **全文搜索**：快速定位内容
-- **阅读进度**：自动保存阅读位置
+截至 2026-03-15，当前代码库已经稳定覆盖这些能力：
 
-### 🤖 AI功能
-- **智能问答**：基于RAG的AI对话
-- **向量检索**：智能内容检索
-- **反幻觉机制**：确保回答准确性
+- 支持导入 `TXT / EPUB / PDF`
+- 书架页可展示已导入书籍并进入阅读页
+- 阅读页可加载统一阅读 payload
+- 设置页通过 preload API 读写设置，并立即作用到页面
+- 阅读进度可保存和恢复
+- 导入失败时书架页会给出错误提示
+- 测试已通过 `152` 项
 
-### 🔊 TTS朗读
-- **语音合成**：Edge TTS引擎
-- **播放控制**：播放/暂停/停止
-- **实时高亮**：朗读位置跟随
+这些模块已经存在，但还没有达到公开试用版标准：
 
-### ⚙️ 个性化设置
-- 字体大小调整
-- 主题切换
-- 阅读偏好设置
+- 标注完整闭环
+- AI 问书闭环
+- TTS 朗读闭环
+- 更完整的阅读交互，例如章节点击跳转、复杂定位、统一分页体验
 
-## 🛠️ 技术栈
+## 技术栈
 
-- **框架**：Electron + React + TypeScript
-- **数据库**：sql.js (SQLite)
-- **搜索**：FlexSearch
-- **TTS**：msedge-tts
-- **AI**：OpenAI API兼容接口
-- **测试**：Vitest (138个测试全部通过)
+- Electron
+- React
+- TypeScript
+- sql.js
+- Vitest
+- epub.js
+- pdfjs-dist
 
-## 📦 安装
+## 本地安装
 
 ```bash
-# 克隆仓库
-git clone https://github.com/ZGY1999/reader-app.git
-cd reader-app
-
-# 安装依赖
 npm install
 ```
 
-## 🚀 开发
+## 开发方式
 
-```bash
-# 终端1：启动Vite dev server
-npm run dev:vite
+当前开发模式下，主进程会固定加载 `http://localhost:5174`，所以 Vite 需要显式跑在 `5174` 端口。
 
-# 终端2：编译并启动Electron
+PowerShell 下推荐这样启动：
+
+```powershell
+# 终端 1
+npm run dev:vite -- --port 5174
+
+# 终端 2
 npm run build:electron
-NODE_ENV=development npx electron .
+$env:NODE_ENV = 'development'
+npx electron .
 ```
 
-## 🧪 测试
+如果只想验证打包后的渲染层：
+
+```powershell
+npm run build
+npm run build:electron
+npx electron .
+```
+
+## 测试
 
 ```bash
-# 运行所有测试
 npm test
-
-# 运行测试并查看覆盖率
-npm run test:ui
 ```
 
-## 📖 使用说明
+## 当前 v0.1 范围
 
-1. **导入书籍**：点击"导入书籍"按钮，选择TXT/EPUB/PDF文件
-2. **开始阅读**：在书架中点击书籍封面进入阅读界面
-3. **使用功能**：
-   - 左侧目录：快速跳转章节
-   - 标注工具：选中文字后使用工具栏标注
-   - TTS朗读：点击底部播放按钮开始朗读
-   - 搜索：顶部搜索框快速查找内容
+`v0.1` 只以阅读底座为验收标准：
 
-## 🔧 配置AI功能
+- 书架可用
+- 三种格式可读
+- 阅读页主流程可用
+- 设置生效
+- 进度恢复可用
+- 基础错误提示存在
 
-在环境变量中配置OpenAI API：
+不在 `v0.1` 验收范围内：
 
-```bash
-export OPENAI_API_KEY=your_api_key
-export OPENAI_BASE_URL=https://api.openai.com/v1
-```
+- 标注产品化
+- AI 产品化
+- TTS 产品化
+- UI 视觉重做
 
-## 📁 项目结构
+## 已知问题
 
-```
-reader-app/
-├── src/
-│   ├── main/           # Electron主进程
-│   ├── preload/        # 预加载脚本
-│   ├── renderer/       # React渲染进程
-│   ├── database/       # 数据库层
-│   ├── services/       # 业务服务
-│   └── utils/          # 工具函数
-├── tests/              # 测试文件
-└── dist/               # 编译输出
-```
-
-## 📝 开发特性
-
-- ✅ 测试驱动开发（TDD）
-- ✅ TypeScript类型安全
-- ✅ 138个单元测试全部通过
-- ✅ 性能优化（LRU缓存）
-- ✅ 安全的IPC通信
-
-## 📄 许可证
-
-MIT License
-
-## 👨‍💻 作者
-
-ZGY1999
-```
+- `src/main/window-manager.ts` 当前开发端口写死为 `5174`
+- PDF 解析测试会输出 `standardFontDataUrl` warning，但测试结果通过
+- 仓库中仍有部分 AI / TTS / 标注代码处于“模块存在、尚未形成公开试用闭环”的状态

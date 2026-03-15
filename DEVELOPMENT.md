@@ -1,39 +1,42 @@
-# 阅读器应用 - 开发完成
+﻿# Development Status
 
-## 已完成的功能
+## 当前目标
 
-### 1. 数据层
-- ✅ BookRepository - 书籍数据访问
-- ✅ ProgressRepository - 阅读进度管理
+当前实现围绕 `v0.1 阅读底座公开试用版` 推进，目标是先把阅读主流程稳定下来。
 
-### 2. 服务层
-- ✅ BookHandler - IPC 处理器
-- ✅ TxtParser - 文本解析
+## 已完成的 v0.1 闭环
 
-### 3. 前端
-- ✅ Bookshelf - 书架页面（导入、列表）
-- ✅ Reader - 阅读器页面（文本渲染、进度保存）
-- ✅ TextRenderer - 文本渲染组件
+- 统一了渲染层使用的 preload API
+- `/`, `/reader`, `/settings` 路由已经连通
+- `TXT / EPUB / PDF` 走统一导入和读取链路
+- 阅读页使用统一 reading payload
+- 设置页通过 `electronAPI.settings` 工作
+- 阅读进度会保存并在重新打开书籍时恢复
+- 书架页导入失败会显示错误信息
+- 相关测试已经补齐并通过
 
-## 测试结果
+## 当前验证结果
 
-所有核心测试通过：
-- BookRepository: 2/2 ✅
-- ProgressRepository: 2/2 ✅
-- BookHandler: 2/2 ✅
-- 集成测试: 1/1 ✅
+2026-03-15 全量测试结果：
 
-## 使用方法
+- `38` 个测试文件通过
+- `152` 项测试通过
 
-1. 启动应用：`npm run dev`
-2. 点击"导入书籍"按钮
-3. 选择 .txt 文件
-4. 点击书籍卡片开始阅读
-5. 滚动时自动保存进度
+运行命令：
 
-## 技术栈
+```bash
+npm test -- --run
+```
 
-- Electron + React + TypeScript
-- SQLite 数据库
-- Zustand 状态管理
-- Vitest 测试框架
+## 下一阶段优先级
+
+1. 校准章节导航和阅读定位体验
+2. 进入 `v0.2 标注闭环`
+3. 在稳定阅读底座上接入 `v0.3 AI`
+4. 最后补 `v0.4 TTS`
+
+## 已知技术限制
+
+- 开发模式依赖 Vite 跑在 `5174` 端口
+- PDF 解析测试有 warning，需要后续处理 `standardFontDataUrl`
+- 仓库里仍有未纳入当前公开试用范围的旧 UI / 服务代码，后续需要继续收敛
