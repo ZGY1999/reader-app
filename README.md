@@ -22,7 +22,8 @@
 - 设置页支持 TTS Voice / TTS Rate 配置
 - 阅读页支持 TTS 朗读、暂停、继续、停止和高亮跟随
 - TTS 默认在正文加载完成后启用，未就绪时不会提前触发朗读
-- 测试已通过 `169` 项
+- 旧的 TTS Reader 组件与 `player:* / highlight:*` IPC 已移除
+- 测试已通过 `142` 项
 
 ## 技术栈
 
@@ -91,4 +92,4 @@ npm test
 ## 已知问题
 
 - PDF 解析测试会输出 `standardFontDataUrl` warning，但测试结果通过
-- 仓库中仍有一套旧的 TTS Reader 组件 / IPC 兼容代码，当前公开试用主路径已经切到 `tts:synthesize + HTMLAudio`
+- 当前公开试用主路径只保留 `tts:synthesize + HTMLAudio`

@@ -20,6 +20,7 @@
 - 设置页支持 TTS Voice / TTS Rate 配置
 - 阅读页支持 TTS 朗读、暂停、继续、停止和正文高亮跟随
 - TTS 默认走 `tts:synthesize + HTMLAudio`，避免依赖旧的主进程播放器状态机
+- 旧的 TTS Reader 组件与 `player:* / highlight:*` IPC 已移除
 - 相关测试已经补齐并通过
 
 ## 当前验证结果
@@ -27,7 +28,8 @@
 2026-03-15 全量验证结果：
 
 - `40` 个测试文件通过
-- `169` 项测试通过
+- `36` 个测试文件通过
+- `142` 项测试通过
 - `npm run build` 通过
 - `npm run build:electron` 通过
 
@@ -39,8 +41,8 @@ npm test -- --run
 
 ## 下一阶段优先级
 
-1. 收敛旧 TTS / AI UI 和兼容 IPC
-2. 开始下一轮公开试用打磨
+1. 开始下一轮公开试用打磨
+2. 梳理 AI / TTS 的错误提示与空状态体验
 3. 再决定是否进入 UI 视觉升级
 
 ## 已知技术限制
@@ -48,4 +50,4 @@ npm test -- --run
 - 开发模式依赖 Vite 跑在 `5174` 端口
 - PDF 解析测试有 warning，需要后续处理 `standardFontDataUrl`
 - 根 `tsconfig` 已排除测试文件，生产构建只检查应用代码
-- 仓库里仍有旧的 TTS Reader 组件 / IPC 兼容代码，后续需要继续收敛
+- 当前 TTS 只保留 `tts:synthesize` 渲染侧播放链路

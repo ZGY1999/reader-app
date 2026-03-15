@@ -6,8 +6,6 @@ import { AnnotationHandler } from './ipc/annotation.handler';
 import { SettingsHandler } from './ipc/settings.handler';
 import { AIHandler } from './ipc/ai.handler';
 import { TTSService } from '../services/tts/tts.service';
-import { PlayerService } from '../services/tts/player.service';
-import { HighlightService } from '../services/tts/highlight.service';
 import * as path from 'path';
 
 const windowManager = new WindowManager();
@@ -20,8 +18,6 @@ let aiHandler: AIHandler;
 
 // 服务实例
 const ttsService = new TTSService();
-const playerService = new PlayerService(ttsService);
-const highlightService = new HighlightService();
 
 app.whenReady().then(async () => {
   await db.init();
@@ -56,74 +52,6 @@ app.whenReady().then(async () => {
       return await ttsService.synthesize(options);
     } catch (error: any) {
       throw new Error(error.message);
-    }
-  });
-
-  // 播放器服务
-  ipcMain.handle('player:play', async (_, text: string, options?: any) => {
-    try {
-      return await playerService.play(text, options);
-    } catch (error: any) {
-      console.error('Player play error:', error);
-      throw error;
-    }
-  });
-  ipcMain.handle('player:pause', () => {
-    try {
-      return playerService.pause();
-    } catch (error: any) {
-      console.error('Player pause error:', error);
-      throw error;
-    }
-  });
-  ipcMain.handle('player:resume', () => {
-    try {
-      return playerService.resume();
-    } catch (error: any) {
-      console.error('Player resume error:', error);
-      throw error;
-    }
-  });
-  ipcMain.handle('player:stop', () => {
-    try {
-      return playerService.stop();
-    } catch (error: any) {
-      console.error('Player stop error:', error);
-      throw error;
-    }
-  });
-  ipcMain.handle('player:getState', () => {
-    try {
-      return playerService.getState();
-    } catch (error: any) {
-      console.error('Player getState error:', error);
-      throw error;
-    }
-  });
-  ipcMain.handle('player:getProgress', () => {
-    try {
-      return playerService.getProgress();
-    } catch (error: any) {
-      console.error('Player getProgress error:', error);
-      throw error;
-    }
-  });
-  ipcMain.handle('player:setRate', (_, rate: number) => {
-    try {
-      return playerService.setRate(rate);
-    } catch (error: any) {
-      console.error('Player setRate error:', error);
-      throw error;
-    }
-  });
-
-  // 高亮服务
-  ipcMain.handle('highlight:updateProgress', (_, progress: number, totalLength: number) => {
-    try {
-      return highlightService.updateProgress(progress, totalLength);
-    } catch (error: any) {
-      console.error('Highlight updateProgress error:', error);
-      throw error;
     }
   });
 
