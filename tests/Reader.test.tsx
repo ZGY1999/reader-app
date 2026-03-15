@@ -172,7 +172,7 @@ describe('Reader', () => {
     });
   });
 
-  it('deletes an existing annotation when the marked text is clicked', async () => {
+  it('deletes an existing annotation only after explicit confirmation in the toolbar', async () => {
     window.electronAPI.annotations.list = vi.fn().mockResolvedValue([
       {
         id: 'ann-1',
@@ -193,6 +193,11 @@ describe('Reader', () => {
     );
 
     fireEvent.click(await screen.findByTestId('annotation-ann-1'));
+
+    expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('已选中标注');
+    expect(window.electronAPI.annotations.delete).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '删除标注' }));
 
     await waitFor(() => {
       expect(window.electronAPI.annotations.delete).toHaveBeenCalledWith('ann-1');

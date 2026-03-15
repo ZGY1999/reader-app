@@ -21,6 +21,7 @@ export default function Reader() {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
+  const [selectedAnnotation, setSelectedAnnotation] = useState<Annotation | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingOffset, setPendingOffset] = useState<number | null>(null);
@@ -64,6 +65,7 @@ export default function Reader() {
       setAnnotations(savedAnnotations);
       setCurrentChapterId(savedProgress?.chapterId ?? payload.chapters?.[0]?.id ?? null);
       setPendingSelection(null);
+      setSelectedAnnotation(null);
       setPendingOffset(savedProgress?.offset ?? null);
     };
 
@@ -108,7 +110,13 @@ export default function Reader() {
   };
 
   const handleSelectionCaptured = (selection: PendingSelection) => {
+    setSelectedAnnotation(null);
     setPendingSelection(selection);
+  };
+
+  const clearActiveAnnotationState = () => {
+    setPendingSelection(null);
+    setSelectedAnnotation(null);
   };
 
   const handleAnnotate = async (style: string) => {
@@ -124,13 +132,22 @@ export default function Reader() {
 
     setAnnotations((currentAnnotations) => [...currentAnnotations, result.annotation]);
     setPendingSelection(null);
+    setSelectedAnnotation(null);
   };
 
-  const handleDeleteAnnotation = async (id: string) => {
-    const result = await api.annotations.delete(id);
+  const handleSelectAnnotation = (annotation: Annotation) => {
+    setPendingSelection(null);
+    setSelectedAnnotation(annotation);
+  };
+
+  const handleDeleteAnnotation = async () => {
+    if (!selectedAnnotation) return;
+
+    const result = await api.annotations.delete(selectedAnnotation.id);
     if (!result.success) return;
 
-    setAnnotations((currentAnnotations) => currentAnnotations.filter((annotation) => annotation.id !== id));
+    setAnnotations((currentAnnotations) => currentAnnotations.filter((annotation) => annotation.id !== selectedAnnotation.id));
+    setSelectedAnnotation(null);
   };
 
   const handleContentScroll = () => {
@@ -224,7 +241,14 @@ export default function Reader() {
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>
-            <AnnotationToolbar onAnnotate={handleAnnotate} selectionText={pendingSelection?.text} disabled={!pendingSelection} />
+            <AnnotationToolbar
+              onAnnotate={handleAnnotate}
+              selectionText={pendingSelection?.text}
+              selectedAnnotationText={selectedAnnotation?.text}
+              disabled={!pendingSelection || !!selectedAnnotation}
+              onDeleteAnnotation={selectedAnnotation ? handleDeleteAnnotation : undefined}
+              onClearActive={pendingSelection || selectedAnnotation ? clearActiveAnnotationState : undefined}
+            />
           </div>
 
           <div
@@ -251,13 +275,19 @@ export default function Reader() {
                       offsetBase={chapter.startOffset}
                       annotations={getChapterAnnotations(chapter.id)}
                       onAnnotate={handleSelectionCaptured}
-                      onDeleteAnnotation={handleDeleteAnnotation}
+                      onSelectAnnotation={handleSelectAnnotation}
+                      onClearSelection={clearActiveAnnotationState}
                     />
                   </section>
                 ))}
               </div>
             ) : (
-              <TextRenderer content={content} onAnnotate={handleSelectionCaptured} onDeleteAnnotation={handleDeleteAnnotation} />
+              <TextRenderer
+                content={content}
+                onAnnotate={handleSelectionCaptured}
+                onSelectAnnotation={handleSelectAnnotation}
+                onClearSelection={clearActiveAnnotationState}
+              />
             )}
           </div>
         </div>

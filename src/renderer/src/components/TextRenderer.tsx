@@ -7,7 +7,8 @@ interface TextRendererProps {
   offsetBase?: number;
   testId?: string;
   onAnnotate?: (data: { startOffset: number; endOffset: number; text: string }) => void;
-  onDeleteAnnotation?: (id: string) => void;
+  onSelectAnnotation?: (annotation: Annotation) => void;
+  onClearSelection?: () => void;
 }
 
 export default function TextRenderer({
@@ -16,11 +17,16 @@ export default function TextRenderer({
   offsetBase = 0,
   testId,
   onAnnotate,
-  onDeleteAnnotation,
+  onSelectAnnotation,
+  onClearSelection,
 }: TextRendererProps) {
   const handleMouseUp = () => {
     const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || !onAnnotate) return;
+    if (!selection || selection.isCollapsed) {
+      onClearSelection?.();
+      return;
+    }
+    if (!onAnnotate) return;
 
     const text = selection.toString();
     const range = selection.getRangeAt(0);
@@ -47,13 +53,13 @@ export default function TextRenderer({
           role="button"
           tabIndex={0}
           data-testid={`annotation-${annotation.id}`}
-          aria-label={`Delete annotation ${annotation.text}`}
+          aria-label={`Select annotation ${annotation.text}`}
           className={`annotation-${annotation.style}`}
-          onClick={() => onDeleteAnnotation?.(annotation.id)}
+          onClick={() => onSelectAnnotation?.(annotation)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
-              onDeleteAnnotation?.(annotation.id);
+              onSelectAnnotation?.(annotation);
             }
           }}
         >

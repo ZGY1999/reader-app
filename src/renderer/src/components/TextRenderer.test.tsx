@@ -1,33 +1,38 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import TextRenderer from './TextRenderer';
+import { Annotation } from '../types';
 
 describe('TextRenderer', () => {
-  it('应该渲染文本内容', () => {
-    render(<TextRenderer content="测试内容" />);
-    expect(screen.getByText('测试内容')).toBeDefined();
+  it('renders plain content', () => {
+    render(<TextRenderer content="Test content" />);
+    expect(screen.getByText('Test content')).toBeDefined();
   });
 
-  it('应该处理空内容', () => {
+  it('handles empty content', () => {
     render(<TextRenderer content="" />);
-    expect(screen.queryByText('测试')).toBeNull();
+    expect(screen.queryByText('Test')).toBeNull();
   });
 
-  it('应该能选择文本并触发标注', () => {
-    const onAnnotate = vi.fn();
-    const { container } = render(<TextRenderer content="这是一段测试文本" onAnnotate={onAnnotate} />);
-
-    const textElement = container.querySelector('div');
-    expect(textElement).toBeDefined();
-  });
-
-  it('应该渲染标注样式', () => {
-    const annotations = [
-      { id: '1', startOffset: 0, endOffset: 2, text: '这是', style: 'underline' }
+  it('renders annotation styles', () => {
+    const annotations: Annotation[] = [
+      { id: '1', startOffset: 0, endOffset: 4, text: 'Test', style: 'underline' },
     ];
-    const { container } = render(<TextRenderer content="这是测试" annotations={annotations} />);
 
-    const annotated = container.querySelector('.annotation-underline');
-    expect(annotated).toBeDefined();
+    const { container } = render(<TextRenderer content="Test body" annotations={annotations} />);
+
+    expect(container.querySelector('.annotation-underline')).toBeDefined();
+  });
+
+  it('selects an annotation instead of deleting it directly', () => {
+    const annotations: Annotation[] = [
+      { id: '1', startOffset: 0, endOffset: 4, text: 'Test', style: 'underline' },
+    ];
+    const onSelectAnnotation = vi.fn();
+
+    render(<TextRenderer content="Test body" annotations={annotations} onSelectAnnotation={onSelectAnnotation} />);
+
+    fireEvent.click(screen.getByTestId('annotation-1'));
+    expect(onSelectAnnotation).toHaveBeenCalledWith(annotations[0]);
   });
 });
