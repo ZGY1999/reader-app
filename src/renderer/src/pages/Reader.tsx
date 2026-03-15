@@ -12,6 +12,16 @@ interface PendingSelection {
   text: string;
 }
 
+interface AICitation {
+  chunkId: string;
+  chapterId?: string;
+  chapterTitle: string;
+  text: string;
+  startOffset: number;
+  endOffset: number;
+  score: number;
+}
+
 export default function Reader() {
   const navigate = useNavigate();
   const currentBook = useBookStore((state) => state.currentBook);
@@ -22,6 +32,12 @@ export default function Reader() {
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [selectedAnnotation, setSelectedAnnotation] = useState<Annotation | null>(null);
+  const [aiConfigured, setAIConfigured] = useState(false);
+  const [aiQuestion, setAIQuestion] = useState('');
+  const [aiAnswer, setAIAnswer] = useState('');
+  const [aiCitations, setAICitations] = useState<AICitation[]>([]);
+  const [aiError, setAIError] = useState('');
+  const [aiLoading, setAILoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingOffset, setPendingOffset] = useState<number | null>(null);
@@ -98,10 +114,11 @@ export default function Reader() {
     let disposed = false;
 
     const loadReading = async () => {
-      const [payload, savedProgress, savedAnnotations] = await Promise.all([
+      const [payload, savedProgress, savedAnnotations, aiStatus] = await Promise.all([
         api.getBookContent(currentBook.id),
         api.getProgress(currentBook.id),
         api.annotations.list(currentBook.id),
+        api.ai.getStatus(),
       ]);
 
       if (disposed) return;
@@ -113,6 +130,12 @@ export default function Reader() {
       setCurrentChapterId(savedProgress?.chapterId ?? payload.chapters?.[0]?.id ?? null);
       setPendingSelection(null);
       setSelectedAnnotation(null);
+      setAIConfigured(aiStatus.configured);
+      setAIQuestion('');
+      setAIAnswer('');
+      setAICitations([]);
+      setAIError('');
+      setAILoading(false);
       setPendingOffset(savedProgress?.offset ?? null);
     };
 
@@ -199,6 +222,38 @@ export default function Reader() {
     if (!selectedAnnotation) return;
 
     await handleDeleteAnnotationById(selectedAnnotation.id);
+  };
+
+  const handleAskAI = async () => {
+    if (!currentBook || !aiConfigured || !aiQuestion.trim()) return;
+
+    setAILoading(true);
+    setAIError('');
+    setAIAnswer('');
+    setAICitations([]);
+
+    try {
+      const result = await api.ai.ask({
+        bookId: currentBook.id,
+        question: aiQuestion.trim(),
+      });
+
+      if (!result.success) {
+        if (result.code === 'NOT_CONFIGURED') {
+          setAIConfigured(false);
+        }
+        setAIError(result.error);
+        setAILoading(false);
+        return;
+      }
+
+      setAIAnswer(result.answer);
+      setAICitations(result.citations);
+      setAILoading(false);
+    } catch (error) {
+      setAIError(error instanceof Error ? error.message : 'AI 请求失败');
+      setAILoading(false);
+    }
   };
 
   const handleContentScroll = () => {
@@ -402,6 +457,47 @@ export default function Reader() {
               onDeleteAnnotation={selectedAnnotation ? handleDeleteAnnotation : undefined}
               onClearActive={pendingSelection || selectedAnnotation ? clearActiveAnnotationState : undefined}
             />
+          </div>
+
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid #ddd', background: '#fcfcfc' }}>
+            <h3 style={{ margin: '0 0 8px' }}>AI 问书</h3>
+            {!aiConfigured ? (
+              <p style={{ margin: 0, color: '#8c8c8c' }}>请先在设置中配置 AI API Key 后再使用问书</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <textarea
+                  placeholder="针对当前书籍提问..."
+                  value={aiQuestion}
+                  onChange={(event) => setAIQuestion(event.target.value)}
+                  rows={3}
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button type="button" disabled={!aiQuestion.trim() || aiLoading} onClick={() => void handleAskAI()}>
+                    {aiLoading ? '回答中...' : '发送提问'}
+                  </button>
+                </div>
+                {aiError ? <p role="alert" style={{ margin: 0, color: '#cf1322' }}>{aiError}</p> : null}
+                {aiAnswer ? (
+                  <div data-testid="ai-answer" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <p style={{ margin: 0, color: '#1f1f1f' }}>{aiAnswer}</p>
+                    {aiCitations.length > 0 ? (
+                      <div>
+                        <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '6px' }}>引用来源</div>
+                        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {aiCitations.map((citation) => (
+                            <li key={citation.chunkId} style={{ background: '#fff', border: '1px solid #eee', borderRadius: '6px', padding: '8px 10px' }}>
+                              <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>{citation.chapterTitle}</div>
+                              <div style={{ fontSize: '13px', color: '#1f1f1f' }}>{citation.text}</div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
 
           <div

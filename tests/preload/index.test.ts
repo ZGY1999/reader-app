@@ -29,6 +29,10 @@ describe('Preload', () => {
           list: expect.any(Function),
           delete: expect.any(Function),
         }),
+        ai: expect.objectContaining({
+          getStatus: expect.any(Function),
+          ask: expect.any(Function),
+        }),
         settings: expect.objectContaining({
           save: expect.any(Function),
           get: expect.any(Function),
@@ -45,6 +49,7 @@ describe('Preload', () => {
     const exposedAPI = vi.mocked(contextBridge.exposeInMainWorld).mock.calls[0][1] as Record<string, unknown>;
 
     expect(Object.keys(exposedAPI).sort()).toEqual([
+      'ai',
       'annotations',
       'getBook',
       'getBookContent',

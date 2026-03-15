@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: (bookId: string) => ipcRenderer.invoke('annotations:list', bookId),
     delete: (id: string) => ipcRenderer.invoke('annotations:delete', id),
   },
+  ai: {
+    getStatus: () => ipcRenderer.invoke('ai:getStatus'),
+    ask: (data: { bookId: string; question: string }) => ipcRenderer.invoke('ai:ask', data),
+  },
 
   settings: {
     save: (key: string, value: string) => ipcRenderer.invoke('settings:save', key, value),

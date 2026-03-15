@@ -6,6 +6,8 @@ interface SettingsData {
   lineHeight?: string;
   fontFamily?: string;
   theme?: string;
+  aiApiKey?: string;
+  aiBaseUrl?: string;
 }
 
 const defaultSettings: Required<SettingsData> = {
@@ -13,6 +15,8 @@ const defaultSettings: Required<SettingsData> = {
   lineHeight: '1.8',
   fontFamily: 'system-ui',
   theme: 'light',
+  aiApiKey: '',
+  aiBaseUrl: 'https://api.openai.com/v1',
 };
 
 export default function Settings() {
@@ -29,7 +33,7 @@ export default function Settings() {
   };
 
   const handleChange = async (key: keyof SettingsData, value: string) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
+    setSettings((prev) => ({ ...prev, [key]: value }));
     await api.settings.save(key, value);
     applySettings({ [key]: value });
   };
@@ -55,7 +59,7 @@ export default function Settings() {
             min="12"
             max="24"
             value={settings.fontSize}
-            onChange={(e) => handleChange('fontSize', e.target.value)}
+            onChange={(event) => handleChange('fontSize', event.target.value)}
           />
         </label>
 
@@ -67,7 +71,7 @@ export default function Settings() {
             max="2.5"
             step="0.1"
             value={settings.lineHeight}
-            onChange={(e) => handleChange('lineHeight', e.target.value)}
+            onChange={(event) => handleChange('lineHeight', event.target.value)}
           />
         </label>
       </section>
@@ -90,6 +94,29 @@ export default function Settings() {
           />
           夜间
         </label>
+      </section>
+
+      <section>
+        <h3>AI 问书</h3>
+        <label>
+          AI API Key
+          <input
+            type="password"
+            value={settings.aiApiKey}
+            onChange={(event) => handleChange('aiApiKey', event.target.value)}
+          />
+        </label>
+
+        <label>
+          AI Base URL
+          <input
+            type="url"
+            value={settings.aiBaseUrl}
+            onChange={(event) => handleChange('aiBaseUrl', event.target.value)}
+          />
+        </label>
+
+        <p>阅读功能默认可用；AI 需要配置 API Key 后启用。</p>
       </section>
     </div>
   );

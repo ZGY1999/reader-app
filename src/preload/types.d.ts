@@ -18,6 +18,30 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<any>;
   };
 
+  ai: {
+    getStatus: () => Promise<{ configured: boolean }>;
+    ask: (data: { bookId: string; question: string }) => Promise<
+      | {
+          success: true;
+          answer: string;
+          citations: Array<{
+            chunkId: string;
+            chapterId?: string;
+            chapterTitle: string;
+            text: string;
+            startOffset: number;
+            endOffset: number;
+            score: number;
+          }>;
+        }
+      | {
+          success: false;
+          code: string;
+          error: string;
+        }
+    >;
+  };
+
   settings: {
     save: (key: string, value: string) => Promise<void>;
     get: (key: string) => Promise<string | null>;

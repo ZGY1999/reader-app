@@ -4,11 +4,10 @@ import { Database } from '../database/sqlite';
 import { BookHandler } from './ipc/book.handler';
 import { AnnotationHandler } from './ipc/annotation.handler';
 import { SettingsHandler } from './ipc/settings.handler';
+import { AIHandler } from './ipc/ai.handler';
 import { TTSService } from '../services/tts/tts.service';
 import { PlayerService } from '../services/tts/player.service';
 import { HighlightService } from '../services/tts/highlight.service';
-import { ChatService } from '../services/ai/chat.service';
-import { VectorService } from '../services/ai/vector.service';
 import * as path from 'path';
 
 const windowManager = new WindowManager();
@@ -17,13 +16,12 @@ const db = new Database(dbPath);
 let bookHandler: BookHandler;
 let annotationHandler: AnnotationHandler;
 let settingsHandler: SettingsHandler;
+let aiHandler: AIHandler;
 
 // 服务实例
 const ttsService = new TTSService();
 const playerService = new PlayerService(ttsService);
 const highlightService = new HighlightService();
-let chatService: ChatService;
-let vectorService: VectorService;
 
 app.whenReady().then(async () => {
   await db.init();
@@ -31,12 +29,7 @@ app.whenReady().then(async () => {
   bookHandler = new BookHandler(db);
   annotationHandler = new AnnotationHandler(db);
   settingsHandler = new SettingsHandler(db);
-
-  // 初始化 AI 服务
-  const apiKey = process.env.OPENAI_API_KEY || '';
-  const baseURL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-  vectorService = new VectorService(apiKey, baseURL);
-  chatService = new ChatService(apiKey, baseURL, vectorService);
+  aiHandler = new AIHandler(bookHandler, settingsHandler);
 
   // 书籍管理
   ipcMain.handle('import-book', async (_, filePath: string) => bookHandler.importBook(filePath));
@@ -53,6 +46,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('settings:save', async (_, key: string, value: string) => settingsHandler.saveSetting(key, value));
   ipcMain.handle('settings:get', async (_, key: string) => settingsHandler.getSetting(key));
   ipcMain.handle('settings:getAll', async () => settingsHandler.getAllSettings());
+
+  ipcMain.handle('ai:getStatus', async () => aiHandler.getStatus());
+  ipcMain.handle('ai:ask', async (_, options) => aiHandler.ask(options));
 
   // TTS 服务
   ipcMain.handle('tts:synthesize', async (_, options) => {
@@ -129,31 +125,6 @@ app.whenReady().then(async () => {
       console.error('Highlight updateProgress error:', error);
       throw error;
     }
-  });
-
-  // AI 问答服务
-  ipcMain.handle('chat:ask', async (_, options) => {
-    try {
-      return await chatService.chat(options);
-    } catch (error: any) {
-      throw new Error(error.message);
-    }
-  });
-
-  ipcMain.handle('chat:stream', async (event, options) => {
-    try {
-      for await (const chunk of chatService.chatStream(options)) {
-        event.sender.send('chat:stream:data', chunk);
-      }
-      event.sender.send('chat:stream:end');
-    } catch (error: any) {
-      event.sender.send('chat:stream:error', error.message);
-    }
-  });
-
-  // 向量服务
-  ipcMain.handle('vector:addDocument', async (_, bookId: string, chunks: any[]) => {
-    await vectorService.addDocument(bookId, chunks);
   });
 
   windowManager.createWindow();

@@ -18,6 +18,10 @@ describe('Settings route', () => {
       getBookContent: vi.fn(),
       saveProgress: vi.fn(),
       getProgress: vi.fn(),
+      ai: {
+        getStatus: vi.fn(),
+        ask: vi.fn(),
+      },
       settings: {
         save: vi.fn().mockResolvedValue(undefined),
         get: vi.fn(),
@@ -25,6 +29,8 @@ describe('Settings route', () => {
           fontSize: '16',
           lineHeight: '1.8',
           theme: 'light',
+          aiApiKey: 'stored-key',
+          aiBaseUrl: 'https://api.test.com/v1',
         }),
       },
     };
@@ -57,5 +63,23 @@ describe('Settings route', () => {
     });
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('loads and saves AI settings through electronAPI.settings.save', async () => {
+    render(<Settings />);
+
+    const apiKeyInput = await screen.findByLabelText('AI API Key');
+    const baseUrlInput = screen.getByLabelText('AI Base URL');
+
+    expect((apiKeyInput as HTMLInputElement).value).toBe('stored-key');
+    expect((baseUrlInput as HTMLInputElement).value).toBe('https://api.test.com/v1');
+
+    fireEvent.change(apiKeyInput, { target: { value: 'new-key' } });
+    fireEvent.change(baseUrlInput, { target: { value: 'https://api.example.com/v1' } });
+
+    await waitFor(() => {
+      expect(window.electronAPI.settings.save).toHaveBeenCalledWith('aiApiKey', 'new-key');
+      expect(window.electronAPI.settings.save).toHaveBeenCalledWith('aiBaseUrl', 'https://api.example.com/v1');
+    });
   });
 });

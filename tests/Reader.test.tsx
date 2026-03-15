@@ -41,6 +41,10 @@ describe('Reader', () => {
       getBookContent: vi.fn().mockResolvedValue(readingPayload),
       saveProgress: vi.fn().mockResolvedValue(undefined),
       getProgress: vi.fn().mockResolvedValue(undefined),
+      ai: {
+        getStatus: vi.fn().mockResolvedValue({ configured: false }),
+        ask: vi.fn(),
+      },
       annotations: {
         create: vi.fn().mockResolvedValue({
           success: true,
@@ -72,6 +76,60 @@ describe('Reader', () => {
     );
 
     expect(screen.getByText('请选择书籍')).toBeDefined();
+  });
+
+  it('shows an AI configuration hint when AI is not configured', async () => {
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    expect(await screen.findByText('请先在设置中配置 AI API Key 后再使用问书')).toBeDefined();
+  });
+
+  it('asks AI questions and renders answer with citations', async () => {
+    window.electronAPI.ai.getStatus = vi.fn().mockResolvedValue({ configured: true });
+    window.electronAPI.ai.ask = vi.fn().mockResolvedValue({
+      success: true,
+      answer: 'Chapter 1 focuses on the opening discussion.',
+      citations: [
+        {
+          chunkId: 'book-1:chunk-1',
+          chapterId: 'ch-1',
+          chapterTitle: 'Chapter 1',
+          text: 'Chapter one content',
+          score: 0.91,
+        },
+      ],
+    });
+
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    fireEvent.change(await screen.findByPlaceholderText('针对当前书籍提问...'), {
+      target: { value: 'What is chapter one about?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送提问' }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.ai.ask).toHaveBeenCalledWith({
+        bookId: 'book-1',
+        question: 'What is chapter one about?',
+      });
+    });
+
+    const answerPanel = await screen.findByTestId('ai-answer');
+    expect(answerPanel.textContent).toContain('Chapter 1 focuses on the opening discussion.');
+    expect(answerPanel.textContent).toContain('Chapter 1');
+    expect(answerPanel.textContent).toContain('Chapter one content');
   });
 
   it('loads the reading payload, annotations, and writes the payload into the store', async () => {
