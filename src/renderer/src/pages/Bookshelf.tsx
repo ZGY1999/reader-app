@@ -1,27 +1,26 @@
 import { useBookStore } from '../store';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../api';
 
 export default function Bookshelf() {
   const { books, setBooks, setCurrentBook } = useBookStore();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (window.electronAPI) {
-      window.electronAPI.getBooks().then(setBooks);
-    }
+    api.getBooks().then(setBooks);
   }, [setBooks]);
 
   const handleImport = async () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.txt';
+    input.accept = '.txt,.epub,.pdf';
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        const result = await window.electronAPI.importBook(file.path);
+        const result = await api.importBook(file.path);
         if (result.success) {
-          const books = await window.electronAPI.getBooks();
+          const books = await api.getBooks();
           setBooks(books);
         }
       }
@@ -29,7 +28,7 @@ export default function Bookshelf() {
     input.click();
   };
 
-  const handleOpen = (book: any) => {
+  const handleOpen = (book: (typeof books)[number]) => {
     setCurrentBook(book);
     navigate('/reader');
   };
