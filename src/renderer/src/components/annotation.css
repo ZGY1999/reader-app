@@ -1,3 +1,19 @@
+.annotation-mark {
+  border-radius: 3px;
+  cursor: pointer;
+  outline: 1px solid transparent;
+  transition: background-color 120ms ease, box-shadow 120ms ease, outline-color 120ms ease;
+}
+
+.annotation-mark:hover {
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.18);
+}
+
+.annotation-active {
+  outline-color: #fa8c16;
+  box-shadow: 0 0 0 2px rgba(250, 140, 22, 0.28);
+}
+
 .annotation-underline {
   text-decoration: underline;
   text-decoration-color: #1890ff;
@@ -10,4 +26,12 @@
 
 .annotation-highlight {
   background-color: #fff566;
+}
+
+.annotation-highlight.annotation-mark:hover {
+  background-color: #ffe58f;
+}
+
+.annotation-highlight.annotation-active {
+  background-color: #ffd666;
 }

@@ -274,6 +274,7 @@ export default function Reader() {
                       content={chapter.content}
                       offsetBase={chapter.startOffset}
                       annotations={getChapterAnnotations(chapter.id)}
+                      activeAnnotationId={selectedAnnotation?.id}
                       onAnnotate={handleSelectionCaptured}
                       onSelectAnnotation={handleSelectAnnotation}
                       onClearSelection={clearActiveAnnotationState}
@@ -284,6 +285,7 @@ export default function Reader() {
             ) : (
               <TextRenderer
                 content={content}
+                activeAnnotationId={selectedAnnotation?.id}
                 onAnnotate={handleSelectionCaptured}
                 onSelectAnnotation={handleSelectAnnotation}
                 onClearSelection={clearActiveAnnotationState}

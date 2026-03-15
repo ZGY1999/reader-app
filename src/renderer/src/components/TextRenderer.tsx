@@ -6,6 +6,7 @@ interface TextRendererProps {
   annotations?: Annotation[];
   offsetBase?: number;
   testId?: string;
+  activeAnnotationId?: string;
   onAnnotate?: (data: { startOffset: number; endOffset: number; text: string }) => void;
   onSelectAnnotation?: (annotation: Annotation) => void;
   onClearSelection?: () => void;
@@ -16,6 +17,7 @@ export default function TextRenderer({
   annotations = [],
   offsetBase = 0,
   testId,
+  activeAnnotationId,
   onAnnotate,
   onSelectAnnotation,
   onClearSelection,
@@ -54,7 +56,7 @@ export default function TextRenderer({
           tabIndex={0}
           data-testid={`annotation-${annotation.id}`}
           aria-label={`Select annotation ${annotation.text}`}
-          className={`annotation-${annotation.style}`}
+          className={`annotation-mark annotation-${annotation.style}${activeAnnotationId === annotation.id ? ' annotation-active' : ''}`}
           onClick={() => onSelectAnnotation?.(annotation)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {

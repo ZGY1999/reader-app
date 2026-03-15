@@ -195,6 +195,7 @@ describe('Reader', () => {
     fireEvent.click(await screen.findByTestId('annotation-ann-1'));
 
     expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('已选中标注');
+    expect(screen.getByTestId('annotation-ann-1').className).toContain('annotation-active');
     expect(window.electronAPI.annotations.delete).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: '删除标注' }));
@@ -203,6 +204,36 @@ describe('Reader', () => {
       expect(window.electronAPI.annotations.delete).toHaveBeenCalledWith('ann-1');
     });
     expect(screen.queryByTestId('annotation-ann-1')).toBeNull();
+  });
+
+  it('clears the active annotation state when the toolbar selection is cancelled', async () => {
+    window.electronAPI.annotations.list = vi.fn().mockResolvedValue([
+      {
+        id: 'ann-1',
+        bookId: 'book-1',
+        startOffset: 0,
+        endOffset: 7,
+        text: 'Chapter',
+        style: 'highlight',
+      },
+    ]);
+
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    fireEvent.click(await screen.findByTestId('annotation-ann-1'));
+
+    expect(screen.getByTestId('annotation-ann-1').className).toContain('annotation-active');
+
+    fireEvent.click(screen.getByRole('button', { name: '取消选中' }));
+
+    expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('先选中文本');
+    expect(screen.getByTestId('annotation-ann-1').className).not.toContain('annotation-active');
   });
 
   it('jumps to a chapter when the sidebar entry is clicked', async () => {

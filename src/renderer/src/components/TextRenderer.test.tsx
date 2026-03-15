@@ -35,4 +35,15 @@ describe('TextRenderer', () => {
     fireEvent.click(screen.getByTestId('annotation-1'));
     expect(onSelectAnnotation).toHaveBeenCalledWith(annotations[0]);
   });
+
+  it('marks the active annotation with a dedicated class', () => {
+    const annotations: Annotation[] = [
+      { id: '1', startOffset: 0, endOffset: 4, text: 'Test', style: 'highlight' },
+    ];
+
+    render(<TextRenderer content="Test body" annotations={annotations} activeAnnotationId="1" />);
+
+    expect(screen.getByTestId('annotation-1').className).toContain('annotation-mark');
+    expect(screen.getByTestId('annotation-1').className).toContain('annotation-active');
+  });
 });
