@@ -6,6 +6,18 @@ export interface ElectronAPI {
   saveProgress: (data: any) => Promise<any>;
   getProgress: (bookId: string) => Promise<any>;
 
+  annotations: {
+    create: (data: {
+      bookId: string;
+      startOffset: number;
+      endOffset: number;
+      text: string;
+      style: string;
+    }) => Promise<any>;
+    list: (bookId: string) => Promise<any[]>;
+    delete: (id: string) => Promise<any>;
+  };
+
   settings: {
     save: (key: string, value: string) => Promise<void>;
     get: (key: string) => Promise<string | null>;

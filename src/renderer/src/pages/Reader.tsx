@@ -1,10 +1,16 @@
-﻿import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AnnotationToolbar from '../components/AnnotationToolbar';
 import TextRenderer from '../components/TextRenderer';
 import { api } from '../api';
 import { useBookStore } from '../store';
-import { Chapter } from '../types';
+import { Annotation, Chapter } from '../types';
+
+interface PendingSelection {
+  startOffset: number;
+  endOffset: number;
+  text: string;
+}
 
 export default function Reader() {
   const navigate = useNavigate();
@@ -12,12 +18,31 @@ export default function Reader() {
   const setReading = useBookStore((state) => state.setReading);
   const [content, setContent] = useState('');
   const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingOffset, setPendingOffset] = useState<number | null>(null);
   const contentContainerRef = useRef<HTMLDivElement | null>(null);
   const chapterSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const chapterRanges = useMemo(() => {
+    let searchFrom = 0;
+
+    return chapters.map((chapter) => {
+      const matchIndex = content.indexOf(chapter.content, searchFrom);
+      const startOffset = matchIndex >= 0 ? matchIndex : searchFrom;
+      const endOffset = startOffset + chapter.content.length;
+      searchFrom = endOffset;
+
+      return {
+        ...chapter,
+        startOffset,
+        endOffset,
+      };
+    });
+  }, [chapters, content]);
 
   useEffect(() => {
     if (!currentBook) return;
@@ -25,9 +50,10 @@ export default function Reader() {
     let disposed = false;
 
     const loadReading = async () => {
-      const [payload, savedProgress] = await Promise.all([
+      const [payload, savedProgress, savedAnnotations] = await Promise.all([
         api.getBookContent(currentBook.id),
         api.getProgress(currentBook.id),
+        api.annotations.list(currentBook.id),
       ]);
 
       if (disposed) return;
@@ -35,7 +61,9 @@ export default function Reader() {
       setReading(payload);
       setContent(payload.content);
       setChapters(payload.chapters || []);
+      setAnnotations(savedAnnotations);
       setCurrentChapterId(savedProgress?.chapterId ?? payload.chapters?.[0]?.id ?? null);
+      setPendingSelection(null);
       setPendingOffset(savedProgress?.offset ?? null);
     };
 
@@ -52,14 +80,14 @@ export default function Reader() {
     contentContainerRef.current.scrollTop = pendingOffset;
     syncCurrentChapter(pendingOffset);
     setPendingOffset(null);
-  }, [chapters, pendingOffset]);
+  }, [chapterRanges, pendingOffset]);
 
   const getVisibleChapterId = (offset: number) => {
-    if (chapters.length === 0) return null;
+    if (chapterRanges.length === 0) return null;
 
-    let activeChapterId = chapters[0].id;
+    let activeChapterId = chapterRanges[0].id;
 
-    for (const chapter of chapters) {
+    for (const chapter of chapterRanges) {
       const section = chapterSectionRefs.current[chapter.id];
       if (!section) continue;
 
@@ -79,11 +107,30 @@ export default function Reader() {
     return nextChapterId;
   };
 
-  const handleAnnotate = (style: string) => {
-    const selection = window.getSelection();
-    if (!selection || selection.toString().length === 0) return;
+  const handleSelectionCaptured = (selection: PendingSelection) => {
+    setPendingSelection(selection);
+  };
 
-    console.log('Annotation style:', style, 'Selected text:', selection.toString());
+  const handleAnnotate = async (style: string) => {
+    if (!currentBook || !pendingSelection) return;
+
+    const result = await api.annotations.create({
+      bookId: currentBook.id,
+      ...pendingSelection,
+      style,
+    });
+
+    if (!result.success) return;
+
+    setAnnotations((currentAnnotations) => [...currentAnnotations, result.annotation]);
+    setPendingSelection(null);
+  };
+
+  const handleDeleteAnnotation = async (id: string) => {
+    const result = await api.annotations.delete(id);
+    if (!result.success) return;
+
+    setAnnotations((currentAnnotations) => currentAnnotations.filter((annotation) => annotation.id !== id));
   };
 
   const handleContentScroll = () => {
@@ -93,7 +140,7 @@ export default function Reader() {
     const maxOffset = Math.max(scrollContainer.scrollHeight - scrollContainer.clientHeight, 0);
     const offset = scrollContainer.scrollTop;
     const progress = maxOffset === 0 ? 0 : offset / maxOffset;
-    const chapterId = syncCurrentChapter(offset) ?? chapters[0]?.id;
+    const chapterId = syncCurrentChapter(offset) ?? chapterRanges[0]?.id;
 
     void api.saveProgress({
       bookId: currentBook.id,
@@ -110,6 +157,19 @@ export default function Reader() {
 
     scrollContainer.scrollTop = section.offsetTop;
     setCurrentChapterId(chapterId);
+  };
+
+  const getChapterAnnotations = (chapterId: string) => {
+    const chapter = chapterRanges.find((item) => item.id === chapterId);
+    if (!chapter) return [];
+
+    return annotations
+      .filter((annotation) => annotation.startOffset >= chapter.startOffset && annotation.endOffset <= chapter.endOffset)
+      .map((annotation) => ({
+        ...annotation,
+        startOffset: annotation.startOffset - chapter.startOffset,
+        endOffset: annotation.endOffset - chapter.startOffset,
+      }));
   };
 
   if (!currentBook) return <div>请选择书籍</div>;
@@ -133,9 +193,9 @@ export default function Reader() {
         {showSidebar && (
           <div style={{ width: '250px', borderRight: '1px solid #ddd', overflowY: 'auto', padding: '10px' }}>
             <h3>目录</h3>
-            {chapters.length > 0 ? (
+            {chapterRanges.length > 0 ? (
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {chapters.map((chapter) => (
+                {chapterRanges.map((chapter) => (
                   <li key={chapter.id} style={{ padding: '5px 0' }}>
                     <button
                       type="button"
@@ -173,9 +233,9 @@ export default function Reader() {
             onScroll={handleContentScroll}
             style={{ flex: 1, overflowY: 'auto' }}
           >
-            {chapters.length > 0 ? (
+            {chapterRanges.length > 0 ? (
               <div style={{ padding: '20px' }}>
-                {chapters.map((chapter) => (
+                {chapterRanges.map((chapter) => (
                   <section
                     key={chapter.id}
                     ref={(element) => {
@@ -185,12 +245,19 @@ export default function Reader() {
                     style={{ marginBottom: '32px' }}
                   >
                     <h3 style={{ margin: '0 0 12px' }}>{chapter.title}</h3>
-                    <TextRenderer content={chapter.content} />
+                    <TextRenderer
+                      testId={`text-renderer-${chapter.id}`}
+                      content={chapter.content}
+                      offsetBase={chapter.startOffset}
+                      annotations={getChapterAnnotations(chapter.id)}
+                      onAnnotate={handleSelectionCaptured}
+                      onDeleteAnnotation={handleDeleteAnnotation}
+                    />
                   </section>
                 ))}
               </div>
             ) : (
-              <TextRenderer content={content} />
+              <TextRenderer content={content} onAnnotate={handleSelectionCaptured} onDeleteAnnotation={handleDeleteAnnotation} />
             )}
           </div>
         </div>

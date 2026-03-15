@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+﻿import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
   contextBridge: {
@@ -11,7 +11,7 @@ vi.mock('electron', () => ({
 }));
 
 describe('Preload', () => {
-  it('应该通过 contextBridge 暴露 API', async () => {
+  it('exposes the renderer API through contextBridge', async () => {
     const { contextBridge } = await import('electron');
     await import('../../src/preload/index');
 
@@ -24,6 +24,11 @@ describe('Preload', () => {
         getBookContent: expect.any(Function),
         saveProgress: expect.any(Function),
         getProgress: expect.any(Function),
+        annotations: expect.objectContaining({
+          create: expect.any(Function),
+          list: expect.any(Function),
+          delete: expect.any(Function),
+        }),
         settings: expect.objectContaining({
           save: expect.any(Function),
           get: expect.any(Function),
@@ -33,13 +38,14 @@ describe('Preload', () => {
     );
   });
 
-  it('应该只暴露 v0.1 所需的稳定 API', async () => {
+  it('only exposes the stable v0.2 renderer surface', async () => {
     const { contextBridge } = await import('electron');
     await import('../../src/preload/index');
 
     const exposedAPI = vi.mocked(contextBridge.exposeInMainWorld).mock.calls[0][1] as Record<string, unknown>;
 
     expect(Object.keys(exposedAPI).sort()).toEqual([
+      'annotations',
       'getBook',
       'getBookContent',
       'getBooks',

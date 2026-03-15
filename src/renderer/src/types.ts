@@ -12,6 +12,15 @@ export interface Chapter {
   content: string;
 }
 
+export interface Annotation {
+  id: string;
+  bookId: string;
+  startOffset: number;
+  endOffset: number;
+  text: string;
+  style: string;
+}
+
 export interface ReadingPayload {
   book: Book;
   content: string;

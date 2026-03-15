@@ -1,26 +1,31 @@
-interface Annotation {
-  id: string;
-  startOffset: number;
-  endOffset: number;
-  text: string;
-  style: string;
-}
+﻿import './annotation.css';
+import { Annotation } from '../types';
 
 interface TextRendererProps {
   content: string;
   annotations?: Annotation[];
+  offsetBase?: number;
+  testId?: string;
   onAnnotate?: (data: { startOffset: number; endOffset: number; text: string }) => void;
+  onDeleteAnnotation?: (id: string) => void;
 }
 
-export default function TextRenderer({ content, annotations = [], onAnnotate }: TextRendererProps) {
+export default function TextRenderer({
+  content,
+  annotations = [],
+  offsetBase = 0,
+  testId,
+  onAnnotate,
+  onDeleteAnnotation,
+}: TextRendererProps) {
   const handleMouseUp = () => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !onAnnotate) return;
 
     const text = selection.toString();
     const range = selection.getRangeAt(0);
-    const startOffset = range.startOffset;
-    const endOffset = range.endOffset;
+    const startOffset = offsetBase + range.startOffset;
+    const endOffset = offsetBase + range.endOffset;
 
     onAnnotate({ startOffset, endOffset, text });
   };
@@ -31,16 +36,31 @@ export default function TextRenderer({ content, annotations = [], onAnnotate }: 
     const parts: JSX.Element[] = [];
     let lastIndex = 0;
 
-    annotations.forEach((ann, i) => {
-      if (ann.startOffset > lastIndex) {
-        parts.push(<span key={`text-${i}`}>{content.slice(lastIndex, ann.startOffset)}</span>);
+    annotations.forEach((annotation, index) => {
+      if (annotation.startOffset > lastIndex) {
+        parts.push(<span key={`text-${index}`}>{content.slice(lastIndex, annotation.startOffset)}</span>);
       }
+
       parts.push(
-        <span key={ann.id} className={`annotation-${ann.style}`}>
-          {content.slice(ann.startOffset, ann.endOffset)}
+        <span
+          key={annotation.id}
+          role="button"
+          tabIndex={0}
+          data-testid={`annotation-${annotation.id}`}
+          aria-label={`Delete annotation ${annotation.text}`}
+          className={`annotation-${annotation.style}`}
+          onClick={() => onDeleteAnnotation?.(annotation.id)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onDeleteAnnotation?.(annotation.id);
+            }
+          }}
+        >
+          {content.slice(annotation.startOffset, annotation.endOffset)}
         </span>
       );
-      lastIndex = ann.endOffset;
+      lastIndex = annotation.endOffset;
     });
 
     if (lastIndex < content.length) {
@@ -51,9 +71,8 @@ export default function TextRenderer({ content, annotations = [], onAnnotate }: 
   };
 
   return (
-    <div style={{ padding: '20px', lineHeight: '1.8', whiteSpace: 'pre-wrap' }} onMouseUp={handleMouseUp}>
+    <div data-testid={testId} style={{ padding: '20px', lineHeight: '1.8', whiteSpace: 'pre-wrap' }} onMouseUp={handleMouseUp}>
       {renderContent()}
     </div>
   );
 }
-

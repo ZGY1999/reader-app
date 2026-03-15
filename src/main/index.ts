@@ -2,6 +2,7 @@ import { app, ipcMain } from 'electron';
 import { WindowManager } from './window-manager';
 import { Database } from '../database/sqlite';
 import { BookHandler } from './ipc/book.handler';
+import { AnnotationHandler } from './ipc/annotation.handler';
 import { SettingsHandler } from './ipc/settings.handler';
 import { TTSService } from '../services/tts/tts.service';
 import { PlayerService } from '../services/tts/player.service';
@@ -14,6 +15,7 @@ const windowManager = new WindowManager();
 const dbPath = path.join(app.getPath('userData'), 'reader.db');
 const db = new Database(dbPath);
 let bookHandler: BookHandler;
+let annotationHandler: AnnotationHandler;
 let settingsHandler: SettingsHandler;
 
 // 服务实例
@@ -27,6 +29,7 @@ app.whenReady().then(async () => {
   await db.init();
   db.initialize();
   bookHandler = new BookHandler(db);
+  annotationHandler = new AnnotationHandler(db);
   settingsHandler = new SettingsHandler(db);
 
   // 初始化 AI 服务
@@ -42,6 +45,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('get-book-content', async (_, id: string) => bookHandler.getBookContent(id));
   ipcMain.handle('save-progress', async (_, data) => bookHandler.saveProgress(data.bookId, data.chapterId, data.offset, data.progress));
   ipcMain.handle('get-progress', async (_, bookId: string) => bookHandler.getProgress(bookId));
+  ipcMain.handle('annotations:create', async (_, data) => annotationHandler.createAnnotation(data));
+  ipcMain.handle('annotations:list', async (_, bookId: string) => annotationHandler.getAnnotations(bookId));
+  ipcMain.handle('annotations:delete', async (_, id: string) => annotationHandler.deleteAnnotation(id));
 
   // 设置管理
   ipcMain.handle('settings:save', async (_, key: string, value: string) => settingsHandler.saveSetting(key, value));
