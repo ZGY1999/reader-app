@@ -2,30 +2,28 @@ import { useBookStore } from '../store';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AnnotationToolbar from '../components/AnnotationToolbar';
-
-interface Chapter {
-  id: string;
-  title: string;
-  content: string;
-}
+import TextRenderer from '../components/TextRenderer';
+import { api } from '../api';
+import { Chapter } from '../types';
 
 export default function Reader() {
   const navigate = useNavigate();
   const currentBook = useBookStore((state) => state.currentBook);
+  const setReading = useBookStore((state) => state.setReading);
   const [content, setContent] = useState('');
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [showSidebar, setShowSidebar] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    if (!currentBook || !window.electronAPI) return;
+    if (!currentBook) return;
 
-    window.electronAPI.getBookContent(currentBook.id).then((data) => {
-      setContent(data.content);
-      setChapters(data.chapters || []);
+    api.getBookContent(currentBook.id).then((payload) => {
+      setReading(payload);
+      setContent(payload.content);
+      setChapters(payload.chapters || []);
     });
-  }, [currentBook]);
+  }, [currentBook, setReading]);
 
   const handleAnnotate = (style: string) => {
     const selection = window.getSelection();
@@ -33,22 +31,6 @@ export default function Reader() {
 
     // TODO: 实现标注功能
     console.log('标注样式:', style, '选中文本:', selection.toString());
-  };
-
-  const handlePlay = async () => {
-    if (!content) return;
-    await window.electronAPI.player.play(content);
-    setIsPlaying(true);
-  };
-
-  const handlePause = async () => {
-    await window.electronAPI.player.pause();
-    setIsPlaying(false);
-  };
-
-  const handleStop = async () => {
-    await window.electronAPI.player.stop();
-    setIsPlaying(false);
   };
 
   if (!currentBook) return <div>请选择书籍</div>;
@@ -96,17 +78,14 @@ export default function Reader() {
           </div>
 
           {/* 文本内容 */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', lineHeight: '1.8' }}>
-            {content}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <TextRenderer content={content} />
           </div>
         </div>
       </div>
 
-      {/* 底部TTS控制栏 */}
+      {/* 底部工具栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderTop: '1px solid #ddd', background: '#f5f5f5' }}>
-        <button onClick={handlePlay} disabled={isPlaying}>▶ 播放</button>
-        <button onClick={handlePause} disabled={!isPlaying}>⏸ 暂停</button>
-        <button onClick={handleStop}>⏹ 停止</button>
         <button onClick={() => setShowSidebar(!showSidebar)}>
           {showSidebar ? '隐藏目录' : '显示目录'}
         </button>
