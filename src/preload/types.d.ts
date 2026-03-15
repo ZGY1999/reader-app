@@ -5,6 +5,9 @@ export interface ElectronAPI {
   getBookContent: (id: string) => Promise<any>;
   saveProgress: (data: any) => Promise<any>;
   getProgress: (bookId: string) => Promise<any>;
+  ttsSpeak?: (text: string) => Promise<any>;
+  ttsPause?: () => Promise<any>;
+  ttsStop?: () => Promise<any>;
 
   annotations: {
     create: (data: {
@@ -42,6 +45,10 @@ export interface ElectronAPI {
     >;
   };
 
+  tts: {
+    synthesize: (data: { text: string; voice?: string; rate?: number }) => Promise<Uint8Array>;
+  };
+
   settings: {
     save: (key: string, value: string) => Promise<void>;
     get: (key: string) => Promise<string | null>;
@@ -52,5 +59,11 @@ export interface ElectronAPI {
 declare global {
   interface Window {
     electronAPI: ElectronAPI;
+    electron: {
+      ipcRenderer: {
+        on: (channel: string, listener: (...args: any[]) => void) => void;
+        removeListener: (channel: string, listener: (...args: any[]) => void) => void;
+      };
+    };
   }
 }

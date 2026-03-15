@@ -22,6 +22,20 @@ interface AICitation {
   score: number;
 }
 
+interface TTSState {
+  status: 'idle' | 'loading' | 'playing' | 'paused';
+  sourceLabel: string;
+  error: string;
+}
+
+interface TTSTarget {
+  text: string;
+  startOffset: number;
+  endOffset: number;
+  chapterId: string | null;
+  sourceLabel: string;
+}
+
 export default function Reader() {
   const navigate = useNavigate();
   const currentBook = useBookStore((state) => state.currentBook);
@@ -38,11 +52,19 @@ export default function Reader() {
   const [aiCitations, setAICitations] = useState<AICitation[]>([]);
   const [aiError, setAIError] = useState('');
   const [aiLoading, setAILoading] = useState(false);
+  const [ttsState, setTTSState] = useState<TTSState>({
+    status: 'idle',
+    sourceLabel: '当前章节',
+    error: '',
+  });
+  const [ttsHighlightRange, setTTSHighlightRange] = useState<{ startOffset: number; endOffset: number } | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingOffset, setPendingOffset] = useState<number | null>(null);
   const contentContainerRef = useRef<HTMLDivElement | null>(null);
-  const chapterSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const chapterSectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   const chapterRanges = useMemo(() => {
     let searchFrom = 0;
@@ -60,6 +82,7 @@ export default function Reader() {
       };
     });
   }, [chapters, content]);
+  const ttsReady = chapterRanges.length > 0 || content.trim().length > 0;
 
   const annotationEntries = useMemo(() => {
     return annotations.map((annotation) => {
@@ -136,6 +159,12 @@ export default function Reader() {
       setAICitations([]);
       setAIError('');
       setAILoading(false);
+      setTTSState({
+        status: 'idle',
+        sourceLabel: payload.chapters?.[0]?.title ?? '当前章节',
+        error: '',
+      });
+      setTTSHighlightRange(null);
       setPendingOffset(savedProgress?.offset ?? null);
     };
 
@@ -153,6 +182,19 @@ export default function Reader() {
     syncCurrentChapter(pendingOffset);
     setPendingOffset(null);
   }, [chapterRanges, pendingOffset]);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+    };
+  }, []);
 
   const getVisibleChapterId = (offset: number) => {
     if (chapterRanges.length === 0) return null;
@@ -254,6 +296,183 @@ export default function Reader() {
       setAIError(error instanceof Error ? error.message : 'AI 请求失败');
       setAILoading(false);
     }
+  };
+
+  const releaseAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  };
+
+  const resolveTTSTarget = (): TTSTarget | null => {
+    if (pendingSelection) {
+      const chapter = chapterRanges.find((item) => pendingSelection.startOffset >= item.startOffset && pendingSelection.endOffset <= item.endOffset);
+      return {
+        text: pendingSelection.text,
+        startOffset: pendingSelection.startOffset,
+        endOffset: pendingSelection.endOffset,
+        chapterId: chapter?.id ?? null,
+        sourceLabel: pendingSelection.text.length > 16 ? `选中文本：${pendingSelection.text.slice(0, 16)}...` : `选中文本：${pendingSelection.text}`,
+      };
+    }
+
+    if (selectedAnnotation) {
+      const chapter = chapterRanges.find((item) => selectedAnnotation.startOffset >= item.startOffset && selectedAnnotation.endOffset <= item.endOffset);
+      return {
+        text: selectedAnnotation.text,
+        startOffset: selectedAnnotation.startOffset,
+        endOffset: selectedAnnotation.endOffset,
+        chapterId: chapter?.id ?? null,
+        sourceLabel: chapter?.title ?? '当前标注',
+      };
+    }
+
+    const activeChapter = chapterRanges.find((chapter) => chapter.id === currentChapterId) ?? chapterRanges[0];
+    if (activeChapter) {
+      return {
+        text: activeChapter.content,
+        startOffset: activeChapter.startOffset,
+        endOffset: activeChapter.endOffset,
+        chapterId: activeChapter.id,
+        sourceLabel: activeChapter.title,
+      };
+    }
+
+    if (!content) return null;
+
+    return {
+      text: content,
+      startOffset: 0,
+      endOffset: content.length,
+      chapterId: null,
+      sourceLabel: '全文',
+    };
+  };
+
+  const updateTTSHighlight = (audio: HTMLAudioElement, target: TTSTarget) => {
+    if (!audio.duration || Number.isNaN(audio.duration) || audio.duration <= 0) {
+      return;
+    }
+
+    const ratio = Math.min(Math.max(audio.currentTime / audio.duration, 0), 1);
+    const spanLength = Math.max(target.endOffset - target.startOffset, 1);
+    const rangeStart = target.startOffset + Math.floor(spanLength * ratio);
+    const rangeEnd = Math.min(target.endOffset, rangeStart + 15);
+
+    setTTSHighlightRange({
+      startOffset: rangeStart,
+      endOffset: Math.max(rangeEnd, rangeStart + 1),
+    });
+  };
+
+  const handlePlayTTS = async () => {
+    const target = resolveTTSTarget();
+    if (!target?.text.trim()) {
+      setTTSState({ status: 'idle', sourceLabel: '当前章节', error: '当前没有可朗读的文本' });
+      setTTSHighlightRange(null);
+      return;
+    }
+
+    releaseAudio();
+    setTTSState({
+      status: 'loading',
+      sourceLabel: target.sourceLabel,
+      error: '',
+    });
+    setTTSHighlightRange({
+      startOffset: target.startOffset,
+      endOffset: Math.min(target.endOffset, target.startOffset + 15),
+    });
+
+    try {
+      const settings = await api.settings.getAll();
+      const audioBytes = await api.tts.synthesize({
+        text: target.text,
+        voice: settings.ttsVoice || undefined,
+        rate: settings.ttsRate ? Number(settings.ttsRate) : 1,
+      });
+      const normalizedBytes = audioBytes instanceof Uint8Array ? audioBytes : new Uint8Array(audioBytes as ArrayLike<number>);
+      const audioPayload = Uint8Array.from(normalizedBytes);
+      const audioUrl = URL.createObjectURL(new Blob([audioPayload], { type: 'audio/mpeg' }));
+      const audio = new Audio(audioUrl);
+
+      audioRef.current = audio;
+      audioUrlRef.current = audioUrl;
+
+      audio.addEventListener('timeupdate', () => updateTTSHighlight(audio, target));
+      audio.addEventListener('ended', () => {
+        setTTSState({
+          status: 'idle',
+          sourceLabel: target.sourceLabel,
+          error: '',
+        });
+        setTTSHighlightRange(null);
+      });
+      audio.addEventListener('pause', () => {
+        if (audio.ended) return;
+        setTTSState((current) => ({
+          status: current.status === 'idle' ? 'idle' : 'paused',
+          sourceLabel: target.sourceLabel,
+          error: current.error,
+        }));
+      });
+      audio.addEventListener('play', () => {
+        setTTSState({
+          status: 'playing',
+          sourceLabel: target.sourceLabel,
+          error: '',
+        });
+      });
+
+      await audio.play();
+      updateTTSHighlight(audio, target);
+    } catch (error) {
+      releaseAudio();
+      setTTSHighlightRange(null);
+      setTTSState({
+        status: 'idle',
+        sourceLabel: target.sourceLabel,
+        error: error instanceof Error ? error.message : 'TTS 播放失败',
+      });
+    }
+  };
+
+  const handlePauseTTS = () => {
+    audioRef.current?.pause();
+  };
+
+  const handleResumeTTS = async () => {
+    if (!audioRef.current) return;
+    await audioRef.current.play();
+  };
+
+  const handleStopTTS = () => {
+    releaseAudio();
+    setTTSHighlightRange(null);
+    setTTSState((current) => ({
+      status: 'idle',
+      sourceLabel: current.sourceLabel,
+      error: '',
+    }));
+  };
+
+  const getChapterTTSHighlight = (chapterId: string) => {
+    const chapter = chapterRanges.find((item) => item.id === chapterId);
+    if (!chapter || !ttsHighlightRange) return null;
+    if (ttsHighlightRange.endOffset <= chapter.startOffset || ttsHighlightRange.startOffset >= chapter.endOffset) {
+      return null;
+    }
+
+    return {
+      startOffset: Math.max(ttsHighlightRange.startOffset - chapter.startOffset, 0),
+      endOffset: Math.min(ttsHighlightRange.endOffset - chapter.startOffset, chapter.content.length),
+    };
   };
 
   const handleContentScroll = () => {
@@ -500,6 +719,30 @@ export default function Reader() {
             )}
           </div>
 
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid #ddd', background: '#f8fbff' }}>
+            <h3 style={{ margin: '0 0 8px' }}>TTS 朗读</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <p style={{ margin: 0, color: '#595959', fontSize: '13px' }}>当前来源：{ttsState.sourceLabel}</p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {ttsState.status === 'idle' || ttsState.status === 'loading' ? (
+                  <button type="button" disabled={ttsState.status === 'loading' || !ttsReady} onClick={() => void handlePlayTTS()}>
+                    {ttsState.status === 'loading' ? '准备中...' : '开始朗读'}
+                  </button>
+                ) : null}
+                {ttsState.status === 'playing' ? (
+                  <button type="button" onClick={handlePauseTTS}>暂停</button>
+                ) : null}
+                {ttsState.status === 'paused' ? (
+                  <button type="button" onClick={() => void handleResumeTTS()}>继续</button>
+                ) : null}
+                {ttsState.status === 'playing' || ttsState.status === 'paused' ? (
+                  <button type="button" onClick={handleStopTTS}>停止</button>
+                ) : null}
+              </div>
+              {ttsState.error ? <p role="alert" style={{ margin: 0, color: '#cf1322' }}>{ttsState.error}</p> : null}
+            </div>
+          </div>
+
           <div
             ref={contentContainerRef}
             data-testid="reader-scroll-container"
@@ -524,6 +767,7 @@ export default function Reader() {
                       offsetBase={chapter.startOffset}
                       annotations={getChapterAnnotations(chapter.id)}
                       activeAnnotationId={selectedAnnotation?.id}
+                      highlightRange={getChapterTTSHighlight(chapter.id)}
                       onAnnotate={handleSelectionCaptured}
                       onSelectAnnotation={handleSelectAnnotation}
                       onClearSelection={clearActiveAnnotationState}
@@ -535,6 +779,7 @@ export default function Reader() {
               <TextRenderer
                 content={content}
                 activeAnnotationId={selectedAnnotation?.id}
+                highlightRange={ttsHighlightRange}
                 onAnnotate={handleSelectionCaptured}
                 onSelectAnnotation={handleSelectAnnotation}
                 onClearSelection={clearActiveAnnotationState}

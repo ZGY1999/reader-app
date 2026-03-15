@@ -31,7 +31,12 @@ describe('Settings route', () => {
           theme: 'light',
           aiApiKey: 'stored-key',
           aiBaseUrl: 'https://api.test.com/v1',
+          ttsVoice: 'en-US-JennyNeural',
+          ttsRate: '1.4',
         }),
+      },
+      tts: {
+        synthesize: vi.fn(),
       },
     };
   });
@@ -80,6 +85,25 @@ describe('Settings route', () => {
     await waitFor(() => {
       expect(window.electronAPI.settings.save).toHaveBeenCalledWith('aiApiKey', 'new-key');
       expect(window.electronAPI.settings.save).toHaveBeenCalledWith('aiBaseUrl', 'https://api.example.com/v1');
+    });
+  });
+
+  it('loads and saves TTS settings through electronAPI.settings.save', async () => {
+    render(<Settings />);
+
+    const voiceInput = await screen.findByLabelText('TTS Voice');
+    const rateInput = screen.getByLabelText(/TTS Rate/);
+
+    expect((voiceInput as HTMLInputElement).value).toBe('en-US-JennyNeural');
+    expect((rateInput as HTMLInputElement).value).toBe('1.4');
+    expect(screen.getByText('1.4x')).toBeDefined();
+
+    fireEvent.change(voiceInput, { target: { value: 'zh-CN-XiaoxiaoNeural' } });
+    fireEvent.change(rateInput, { target: { value: '0.8' } });
+
+    await waitFor(() => {
+      expect(window.electronAPI.settings.save).toHaveBeenCalledWith('ttsVoice', 'zh-CN-XiaoxiaoNeural');
+      expect(window.electronAPI.settings.save).toHaveBeenCalledWith('ttsRate', '0.8');
     });
   });
 });

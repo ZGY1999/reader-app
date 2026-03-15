@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getStatus: () => ipcRenderer.invoke('ai:getStatus'),
     ask: (data: { bookId: string; question: string }) => ipcRenderer.invoke('ai:ask', data),
   },
+  tts: {
+    synthesize: (data: { text: string; voice?: string; rate?: number }) => ipcRenderer.invoke('tts:synthesize', data),
+  },
 
   settings: {
     save: (key: string, value: string) => ipcRenderer.invoke('settings:save', key, value),

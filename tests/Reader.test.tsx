@@ -1,5 +1,5 @@
 ﻿import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import Reader from '../src/renderer/src/pages/Reader';
 import { useBookStore } from '../src/renderer/src/store';
@@ -26,13 +26,65 @@ const readingPayload = {
   ],
 };
 
+class MockAudio {
+  static instances: MockAudio[] = [];
+
+  currentTime = 0;
+  duration = 10;
+  ended = false;
+  paused = true;
+  src: string;
+  private listeners = new Map<string, Set<() => void>>();
+
+  constructor(src: string) {
+    this.src = src;
+    MockAudio.instances.push(this);
+  }
+
+  addEventListener(event: string, handler: () => void) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)?.add(handler);
+  }
+
+  removeEventListener(event: string, handler: () => void) {
+    this.listeners.get(event)?.delete(handler);
+  }
+
+  async play() {
+    this.paused = false;
+    this.emit('play');
+  }
+
+  pause() {
+    this.paused = true;
+    this.emit('pause');
+  }
+
+  emit(event: string) {
+    this.listeners.get(event)?.forEach((handler) => handler());
+  }
+}
+
 describe('Reader', () => {
   beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    MockAudio.instances = [];
     useBookStore.setState({
       books: [],
       currentBook: null,
       reading: null,
     });
+
+    vi.stubGlobal('Audio', MockAudio);
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, {
+        createObjectURL: vi.fn().mockReturnValue('blob:tts-audio'),
+        revokeObjectURL: vi.fn(),
+      })
+    );
 
     window.electronAPI = {
       importBook: vi.fn(),
@@ -63,7 +115,13 @@ describe('Reader', () => {
       settings: {
         save: vi.fn(),
         get: vi.fn(),
-        getAll: vi.fn(),
+        getAll: vi.fn().mockResolvedValue({
+          ttsVoice: 'en-US-JennyNeural',
+          ttsRate: '1.4',
+        }),
+      },
+      tts: {
+        synthesize: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
       },
     };
   });
@@ -428,5 +486,61 @@ describe('Reader', () => {
     });
     expect(lastCall.progress).toBeCloseTo(0.625);
     expect(screen.getByRole('button', { name: 'Chapter 2' }).getAttribute('aria-current')).toBe('true');
+  });
+
+  it('plays TTS for the current chapter and exposes playback controls', async () => {
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    const { container } = render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    await screen.findByTestId('text-renderer-ch-1');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '开始朗读' }));
+    });
+
+    await waitFor(() => {
+      expect(window.electronAPI.tts.synthesize).toHaveBeenCalledWith({
+        text: 'Chapter one content',
+        voice: 'en-US-JennyNeural',
+        rate: 1.4,
+      });
+    });
+
+    expect(await screen.findByText('当前来源：Chapter 1')).toBeDefined();
+    expect(screen.getByRole('button', { name: '暂停' })).toBeDefined();
+
+    const audio = MockAudio.instances[0];
+    await act(async () => {
+      audio.currentTime = 5;
+      audio.emit('timeupdate');
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('.tts-highlight')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '暂停' }));
+    });
+    expect(await screen.findByRole('button', { name: '继续' })).toBeDefined();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '暂停' })).toBeDefined();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '停止' }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '开始朗读' })).toBeDefined();
+    });
   });
 });

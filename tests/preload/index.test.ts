@@ -33,6 +33,9 @@ describe('Preload', () => {
           getStatus: expect.any(Function),
           ask: expect.any(Function),
         }),
+        tts: expect.objectContaining({
+          synthesize: expect.any(Function),
+        }),
         settings: expect.objectContaining({
           save: expect.any(Function),
           get: expect.any(Function),
@@ -58,6 +61,7 @@ describe('Preload', () => {
       'importBook',
       'saveProgress',
       'settings',
+      'tts',
     ]);
   });
 });

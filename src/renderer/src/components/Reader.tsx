@@ -22,17 +22,17 @@ export default function Reader({ content, bookId }: ReaderProps) {
   }, []);
 
   const handlePlay = async () => {
-    await window.electronAPI.ttsSpeak(content);
+    await window.electronAPI.ttsSpeak?.(content);
     setIsPlaying(true);
   };
 
   const handlePause = async () => {
-    await window.electronAPI.ttsPause();
+    await window.electronAPI.ttsPause?.();
     setIsPlaying(false);
   };
 
   const handleStop = async () => {
-    await window.electronAPI.ttsStop();
+    await window.electronAPI.ttsStop?.();
     setIsPlaying(false);
     setCurrentIndex(0);
   };

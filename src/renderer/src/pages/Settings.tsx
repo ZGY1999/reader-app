@@ -8,6 +8,8 @@ interface SettingsData {
   theme?: string;
   aiApiKey?: string;
   aiBaseUrl?: string;
+  ttsVoice?: string;
+  ttsRate?: string;
 }
 
 const defaultSettings: Required<SettingsData> = {
@@ -17,6 +19,8 @@ const defaultSettings: Required<SettingsData> = {
   theme: 'light',
   aiApiKey: '',
   aiBaseUrl: 'https://api.openai.com/v1',
+  ttsVoice: 'zh-CN-XiaoxiaoNeural',
+  ttsRate: '1',
 };
 
 export default function Settings() {
@@ -117,6 +121,33 @@ export default function Settings() {
         </label>
 
         <p>阅读功能默认可用；AI 需要配置 API Key 后启用。</p>
+      </section>
+
+      <section>
+        <h3>TTS 朗读</h3>
+        <label>
+          TTS Voice
+          <input
+            type="text"
+            value={settings.ttsVoice}
+            onChange={(event) => handleChange('ttsVoice', event.target.value)}
+          />
+        </label>
+
+        <label>
+          TTS Rate
+          <input
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.1"
+            value={settings.ttsRate}
+            onChange={(event) => handleChange('ttsRate', event.target.value)}
+          />
+          <span>{settings.ttsRate}x</span>
+        </label>
+
+        <p>默认使用 Edge TTS；如环境受限，朗读会在阅读页显示错误信息。</p>
       </section>
     </div>
   );
