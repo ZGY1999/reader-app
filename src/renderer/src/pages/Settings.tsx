@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../api';
 
 interface SettingsData {
   fontSize?: string;
@@ -7,35 +8,38 @@ interface SettingsData {
   theme?: string;
 }
 
+const defaultSettings: Required<SettingsData> = {
+  fontSize: '16',
+  lineHeight: '1.8',
+  fontFamily: 'system-ui',
+  theme: 'light',
+};
+
 export default function Settings() {
-  const [settings, setSettings] = useState<SettingsData>({
-    fontSize: '16',
-    lineHeight: '1.8',
-    fontFamily: 'system-ui',
-    theme: 'light'
-  });
+  const [settings, setSettings] = useState<SettingsData>(defaultSettings);
 
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
   }, []);
 
   const loadSettings = async () => {
-    const data = await window.electron.ipcRenderer.invoke('settings:getAll');
-    setSettings(prev => ({ ...prev, ...data }));
+    const loadedSettings = { ...defaultSettings, ...await api.settings.getAll() };
+    setSettings(loadedSettings);
+    applySettings(loadedSettings);
   };
 
-  const handleChange = async (key: string, value: string) => {
+  const handleChange = async (key: keyof SettingsData, value: string) => {
     setSettings(prev => ({ ...prev, [key]: value }));
-    await window.electron.ipcRenderer.invoke('settings:save', key, value);
-    applySettings(key, value);
+    await api.settings.save(key, value);
+    applySettings({ [key]: value });
   };
 
-  const applySettings = (key: string, value: string) => {
+  const applySettings = (nextSettings: Partial<SettingsData>) => {
     const root = document.documentElement;
-    if (key === 'fontSize') root.style.setProperty('--font-size', value + 'px');
-    if (key === 'lineHeight') root.style.setProperty('--line-height', value);
-    if (key === 'fontFamily') root.style.setProperty('--font-family', value);
-    if (key === 'theme') root.setAttribute('data-theme', value);
+    if (nextSettings.fontSize) root.style.setProperty('--font-size', `${nextSettings.fontSize}px`);
+    if (nextSettings.lineHeight) root.style.setProperty('--line-height', nextSettings.lineHeight);
+    if (nextSettings.fontFamily) root.style.setProperty('--font-family', nextSettings.fontFamily);
+    if (nextSettings.theme) root.setAttribute('data-theme', nextSettings.theme);
   };
 
   return (

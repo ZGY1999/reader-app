@@ -1,14 +1,19 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PdfParser } from '../src/services/book-parser/pdf.parser';
+import * as os from 'os';
 import * as path from 'path';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import * as fs from 'fs/promises';
 
 describe('PdfParser', () => {
   const parser = new PdfParser();
-  const sampleFile = path.join(__dirname, 'fixtures', 'sample.pdf');
+  let tempDir: string;
+  let sampleFile: string;
 
   beforeAll(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'reader-app-pdf-parser-'));
+    sampleFile = path.join(tempDir, 'sample.pdf');
+
     const pdfDoc = await PDFDocument.create();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
@@ -23,7 +28,13 @@ describe('PdfParser', () => {
     await fs.writeFile(sampleFile, pdfBytes);
   });
 
-  it('应该解析 PDF 文件', async () => {
+  afterAll(async () => {
+    if (tempDir) {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('parses a PDF file', async () => {
     const book = await parser.parse(sampleFile);
     expect(book).toBeDefined();
     expect(book.content).toBeTruthy();
@@ -31,17 +42,17 @@ describe('PdfParser', () => {
     expect(Array.isArray(book.chapters)).toBe(true);
   });
 
-  it('应该提取书籍元数据', async () => {
+  it('extracts book metadata', async () => {
     const book = await parser.parse(sampleFile);
     expect(book.title).toBeTruthy();
   });
 
-  it('应该逐页提取文本', async () => {
+  it('extracts text page by page', async () => {
     const book = await parser.parse(sampleFile);
     expect(book.content.length).toBeGreaterThan(0);
   });
 
-  it('应该保留页码信息', async () => {
+  it('preserves page markers in chapters', async () => {
     const book = await parser.parse(sampleFile);
     expect(book.chapters).toBeDefined();
     expect(book.chapters!.length).toBeGreaterThan(0);

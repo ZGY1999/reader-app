@@ -1,9 +1,9 @@
-import { useBookStore } from '../store';
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AnnotationToolbar from '../components/AnnotationToolbar';
 import TextRenderer from '../components/TextRenderer';
 import { api } from '../api';
+import { useBookStore } from '../store';
 import { Chapter } from '../types';
 
 export default function Reader() {
@@ -14,30 +14,69 @@ export default function Reader() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [showSidebar, setShowSidebar] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingOffset, setPendingOffset] = useState<number | null>(null);
+  const contentContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!currentBook) return;
 
-    api.getBookContent(currentBook.id).then((payload) => {
+    let disposed = false;
+
+    const loadReading = async () => {
+      const [payload, savedProgress] = await Promise.all([
+        api.getBookContent(currentBook.id),
+        api.getProgress(currentBook.id),
+      ]);
+
+      if (disposed) return;
+
       setReading(payload);
       setContent(payload.content);
       setChapters(payload.chapters || []);
-    });
+      setPendingOffset(savedProgress?.offset ?? null);
+    };
+
+    void loadReading();
+
+    return () => {
+      disposed = true;
+    };
   }, [currentBook, setReading]);
+
+  useEffect(() => {
+    if (pendingOffset === null || !contentContainerRef.current) return;
+
+    contentContainerRef.current.scrollTop = pendingOffset;
+    setPendingOffset(null);
+  }, [content, pendingOffset]);
 
   const handleAnnotate = (style: string) => {
     const selection = window.getSelection();
     if (!selection || selection.toString().length === 0) return;
 
-    // TODO: 实现标注功能
-    console.log('标注样式:', style, '选中文本:', selection.toString());
+    console.log('Annotation style:', style, 'Selected text:', selection.toString());
+  };
+
+  const handleContentScroll = () => {
+    if (!currentBook || !contentContainerRef.current) return;
+
+    const scrollContainer = contentContainerRef.current;
+    const maxOffset = Math.max(scrollContainer.scrollHeight - scrollContainer.clientHeight, 0);
+    const offset = scrollContainer.scrollTop;
+    const progress = maxOffset === 0 ? 0 : offset / maxOffset;
+
+    void api.saveProgress({
+      bookId: currentBook.id,
+      chapterId: chapters[0]?.id,
+      offset,
+      progress,
+    });
   };
 
   if (!currentBook) return <div>请选择书籍</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      {/* 顶部工具栏 */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '10px', borderBottom: '1px solid #ddd', background: '#f5f5f5' }}>
         <button onClick={() => navigate('/')} style={{ marginRight: '10px' }}>← 返回书架</button>
         <h2 style={{ flex: 1, margin: 0 }}>{currentBook.title}</h2>
@@ -52,7 +91,6 @@ export default function Reader() {
       </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* 侧边栏 - 目录 */}
         {showSidebar && (
           <div style={{ width: '250px', borderRight: '1px solid #ddd', overflowY: 'auto', padding: '10px' }}>
             <h3>目录</h3>
@@ -70,21 +108,22 @@ export default function Reader() {
           </div>
         )}
 
-        {/* 主内容区 */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {/* 标注工具栏 */}
           <div style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>
             <AnnotationToolbar onAnnotate={handleAnnotate} />
           </div>
 
-          {/* 文本内容 */}
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div
+            ref={contentContainerRef}
+            data-testid="reader-scroll-container"
+            onScroll={handleContentScroll}
+            style={{ flex: 1, overflowY: 'auto' }}
+          >
             <TextRenderer content={content} />
           </div>
         </div>
       </div>
 
-      {/* 底部工具栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderTop: '1px solid #ddd', background: '#f5f5f5' }}>
         <button onClick={() => setShowSidebar(!showSidebar)}>
           {showSidebar ? '隐藏目录' : '显示目录'}

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Database } from '../src/database/sqlite';
 import { BookHandler } from '../src/main/ipc/book.handler';
 import * as fs from 'fs';
@@ -16,7 +16,7 @@ describe('Reading payload flow', () => {
 
     fs.writeFileSync(
       testBookPath,
-      '测试小说\n作者：测试作者\n第一章 开始\n这是第一章的内容。\n第二章 继续\n这是第二章的内容。'
+      ['Test Novel', 'Author: Test Author', 'Chapter 1', 'First chapter content.', 'Chapter 2', 'Second chapter content.'].join('\n')
     );
 
     db = new Database(testDbPath);
@@ -25,7 +25,13 @@ describe('Reading payload flow', () => {
     handler = new BookHandler(db);
   });
 
-  it('应该返回统一的阅读 payload', async () => {
+  afterEach(() => {
+    db?.close();
+    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+    if (fs.existsSync(testBookPath)) fs.unlinkSync(testBookPath);
+  });
+
+  it('returns a unified reading payload', async () => {
     const importResult = await handler.importBook(testBookPath);
     expect(importResult.success).toBe(true);
 
@@ -35,7 +41,7 @@ describe('Reading payload flow', () => {
     expect(payload).toEqual({
       book: expect.objectContaining({
         id: books[0].id,
-        title: '测试小说',
+        title: 'Test Novel',
         format: 'txt',
       }),
       content: expect.any(String),
