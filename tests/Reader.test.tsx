@@ -84,6 +84,14 @@ describe('Reader', () => {
         text: 'Chapter',
         style: 'highlight',
       },
+      {
+        id: 'ann-2',
+        bookId: 'book-1',
+        startOffset: 21,
+        endOffset: 28,
+        text: 'Chapter',
+        style: 'underline',
+      },
     ]);
 
     useBookStore.getState().setCurrentBook(readingPayload.book);
@@ -99,6 +107,11 @@ describe('Reader', () => {
     expect(window.electronAPI.getBookContent).toHaveBeenCalledWith('book-1');
     expect(window.electronAPI.annotations.list).toHaveBeenCalledWith('book-1');
     expect(await screen.findByTestId('annotation-ann-1')).toBeDefined();
+    expect(await screen.findByTestId('annotation-ann-2')).toBeDefined();
+    expect(screen.getByTestId('annotation-group-title-ch-1').textContent).toContain('Chapter 1');
+    expect(screen.getByTestId('annotation-group-title-ch-2').textContent).toContain('Chapter 2');
+    expect(screen.getByTestId('annotation-group-title-ch-1').textContent).toContain('1');
+    expect(screen.getByTestId('annotation-group-title-ch-2').textContent).toContain('1');
     expect(useBookStore.getState().reading).toEqual(readingPayload);
   });
 

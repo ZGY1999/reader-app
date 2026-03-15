@@ -57,6 +57,41 @@ export default function Reader() {
     });
   }, [annotations, chapterRanges]);
 
+  const annotationGroups = useMemo(() => {
+    const chapterGroupMap = new Map(
+      chapterRanges.map((chapter) => [
+        chapter.id,
+        {
+          id: chapter.id,
+          title: chapter.title,
+          annotations: [] as typeof annotationEntries,
+        },
+      ])
+    );
+    const ungroupedAnnotations: typeof annotationEntries = [];
+
+    annotationEntries.forEach((annotation) => {
+      if (annotation.chapterId && chapterGroupMap.has(annotation.chapterId)) {
+        chapterGroupMap.get(annotation.chapterId)?.annotations.push(annotation);
+        return;
+      }
+
+      ungroupedAnnotations.push(annotation);
+    });
+
+    const orderedGroups = Array.from(chapterGroupMap.values()).filter((group) => group.annotations.length > 0);
+
+    if (ungroupedAnnotations.length > 0) {
+      orderedGroups.push({
+        id: 'ungrouped',
+        title: '全文',
+        annotations: ungroupedAnnotations,
+      });
+    }
+
+    return orderedGroups;
+  }, [annotationEntries, chapterRanges]);
+
   useEffect(() => {
     if (!currentBook) return;
 
@@ -281,63 +316,75 @@ export default function Reader() {
 
             <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #eee' }}>
               <h3 style={{ margin: '0 0 8px' }}>标注</h3>
-              {annotationEntries.length > 0 ? (
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {annotationEntries.map((annotation) => (
-                    <li key={annotation.id}>
+              {annotationGroups.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {annotationGroups.map((group) => (
+                    <section key={group.id}>
                       <div
-                        style={{
-                          background: selectedAnnotation?.id === annotation.id ? '#fff1b8' : '#fafafa',
-                          border: '1px solid #e8e8e8',
-                          borderRadius: '6px',
-                          padding: '8px 10px',
-                        }}
+                        data-testid={`annotation-group-title-${group.id}`}
+                        style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}
                       >
-                        <button
-                          type="button"
-                          data-testid={`annotation-link-${annotation.id}`}
-                          aria-current={selectedAnnotation?.id === annotation.id ? 'true' : 'false'}
-                          onClick={() => handleAnnotationJump(annotation)}
-                          style={{
-                            width: '100%',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            background: 'transparent',
-                            border: 'none',
-                            padding: 0,
-                            marginBottom: '8px',
-                          }}
-                        >
-                          <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>{annotation.chapterTitle}</div>
-                          <div style={{ fontSize: '13px', color: '#1f1f1f', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {annotation.text}
-                          </div>
-                        </button>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            data-testid={`annotation-focus-${annotation.id}`}
-                            disabled={selectedAnnotation?.id === annotation.id}
-                            onClick={() => handleAnnotationJump(annotation)}
-                            style={{ flex: 1 }}
-                          >
-                            {selectedAnnotation?.id === annotation.id ? '已定位' : '定位'}
-                          </button>
-                          <button
-                            type="button"
-                            data-testid={`annotation-delete-${annotation.id}`}
-                            onClick={() => {
-                              void handleDeleteAnnotationById(annotation.id);
-                            }}
-                            style={{ flex: 1 }}
-                          >
-                            删除
-                          </button>
-                        </div>
+                        <span>{group.title}</span>
+                        <span>{group.annotations.length}</span>
                       </div>
-                    </li>
+                      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {group.annotations.map((annotation) => (
+                          <li key={annotation.id}>
+                            <div
+                              style={{
+                                background: selectedAnnotation?.id === annotation.id ? '#fff1b8' : '#fafafa',
+                                border: '1px solid #e8e8e8',
+                                borderRadius: '6px',
+                                padding: '8px 10px',
+                              }}
+                            >
+                              <button
+                                type="button"
+                                data-testid={`annotation-link-${annotation.id}`}
+                                aria-current={selectedAnnotation?.id === annotation.id ? 'true' : 'false'}
+                                onClick={() => handleAnnotationJump(annotation)}
+                                style={{
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  padding: 0,
+                                  marginBottom: '8px',
+                                }}
+                              >
+                                <div style={{ fontSize: '13px', color: '#1f1f1f', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {annotation.text}
+                                </div>
+                              </button>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                  type="button"
+                                  data-testid={`annotation-focus-${annotation.id}`}
+                                  disabled={selectedAnnotation?.id === annotation.id}
+                                  onClick={() => handleAnnotationJump(annotation)}
+                                  style={{ flex: 1 }}
+                                >
+                                  {selectedAnnotation?.id === annotation.id ? '已定位' : '定位'}
+                                </button>
+                                <button
+                                  type="button"
+                                  data-testid={`annotation-delete-${annotation.id}`}
+                                  onClick={() => {
+                                    void handleDeleteAnnotationById(annotation.id);
+                                  }}
+                                  style={{ flex: 1 }}
+                                >
+                                  删除
+                                </button>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
                   ))}
-                </ul>
+                </div>
               ) : (
                 <p style={{ margin: 0, color: '#8c8c8c', fontSize: '13px' }}>当前书籍还没有标注</p>
               )}
