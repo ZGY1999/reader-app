@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BrowserWindow } from 'electron';
 
 vi.mock('electron', () => ({
@@ -11,14 +11,16 @@ vi.mock('electron', () => ({
 describe('WindowManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.NODE_ENV;
   });
 
-  it('应该创建窗口', async () => {
+  it('creates a browser window', async () => {
     const { WindowManager } = await import('../../src/main/window-manager');
     const manager = new WindowManager();
 
     const mockWindow = {
       loadFile: vi.fn(),
+      loadURL: vi.fn(),
       on: vi.fn(),
     };
     (BrowserWindow as any).mockImplementation(() => mockWindow);
@@ -29,12 +31,13 @@ describe('WindowManager', () => {
     expect(win).toBeDefined();
   });
 
-  it('应该返回主窗口实例', async () => {
+  it('returns the main window instance', async () => {
     const { WindowManager } = await import('../../src/main/window-manager');
     const manager = new WindowManager();
 
     const mockWindow = {
       loadFile: vi.fn(),
+      loadURL: vi.fn(),
       on: vi.fn(),
     };
     (BrowserWindow as any).mockImplementation(() => mockWindow);
@@ -43,5 +46,23 @@ describe('WindowManager', () => {
     const mainWin = manager.getMainWindow();
 
     expect(mainWin).toBe(mockWindow);
+  });
+
+  it('loads the fixed Vite dev server URL in development mode', async () => {
+    process.env.NODE_ENV = 'development';
+    const { WindowManager } = await import('../../src/main/window-manager');
+    const manager = new WindowManager();
+
+    const mockWindow = {
+      loadFile: vi.fn(),
+      loadURL: vi.fn(),
+      on: vi.fn(),
+    };
+    (BrowserWindow as any).mockImplementation(() => mockWindow);
+
+    manager.createWindow();
+
+    expect(mockWindow.loadURL).toHaveBeenCalledWith('http://localhost:5174');
+    expect(mockWindow.loadFile).not.toHaveBeenCalled();
   });
 });
