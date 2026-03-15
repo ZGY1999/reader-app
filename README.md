@@ -11,10 +11,11 @@
 - 支持导入 `TXT / EPUB / PDF`
 - 书架页可展示已导入书籍并进入阅读页
 - 阅读页可加载统一阅读 payload
+- 目录可跳转到章节，滚动时会同步当前章节
 - 设置页通过 preload API 读写设置，并立即作用到页面
 - 阅读进度可保存和恢复
 - 导入失败时书架页会给出错误提示
-- 测试已通过 `152` 项
+- 测试已通过 `155` 项
 
 这些模块已经存在，但还没有达到公开试用版标准：
 
@@ -41,13 +42,13 @@ npm install
 
 ## 开发方式
 
-当前开发模式下，主进程会固定加载 `http://localhost:5174`，所以 Vite 需要显式跑在 `5174` 端口。
+当前开发模式下，主进程会固定加载 `http://localhost:5174`，Vite 配置也已经固定在 `5174` 端口。
 
 PowerShell 下推荐这样启动：
 
 ```powershell
 # 终端 1
-npm run dev:vite -- --port 5174
+npm run dev:vite
 
 # 终端 2
 npm run build:electron
@@ -89,6 +90,5 @@ npm test
 
 ## 已知问题
 
-- `src/main/window-manager.ts` 当前开发端口写死为 `5174`
 - PDF 解析测试会输出 `standardFontDataUrl` warning，但测试结果通过
 - 仓库中仍有部分 AI / TTS / 标注代码处于“模块存在、尚未形成公开试用闭环”的状态
