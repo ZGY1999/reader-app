@@ -10,6 +10,8 @@ describe('TxtParser', () => {
     const book = await parser.parse(sampleFile);
     expect(book).toBeDefined();
     expect(book.content).toBeTruthy();
+    expect(book.format).toBe('txt');
+    expect(Array.isArray(book.chapters)).toBe(true);
   });
 
   it('应该提取书籍标题', async () => {

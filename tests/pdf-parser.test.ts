@@ -27,6 +27,8 @@ describe('PdfParser', () => {
     const book = await parser.parse(sampleFile);
     expect(book).toBeDefined();
     expect(book.content).toBeTruthy();
+    expect(book.format).toBe('pdf');
+    expect(Array.isArray(book.chapters)).toBe(true);
   });
 
   it('应该提取书籍元数据', async () => {

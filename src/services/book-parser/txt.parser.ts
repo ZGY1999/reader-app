@@ -2,20 +2,10 @@ import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
 import * as jschardet from 'jschardet';
 import * as iconv from 'iconv-lite';
+import { ParsedBook, ParsedChapter } from './types';
 
-export interface Chapter {
-  id: string;
-  title: string;
-  content: string;
-}
-
-export interface Book {
-  id: string;
-  title: string;
-  author?: string;
-  content: string;
-  chapters?: Chapter[];
-}
+export type Chapter = ParsedChapter;
+export type Book = ParsedBook;
 
 export class TxtParser {
   async parse(filePath: string): Promise<Book> {
@@ -35,8 +25,9 @@ export class TxtParser {
       id: crypto.randomUUID(),
       title,
       author,
+      format: 'txt',
       content,
-      chapters
+      chapters,
     };
   }
 
