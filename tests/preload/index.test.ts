@@ -5,7 +5,7 @@ vi.mock('electron', () => ({
     exposeInMainWorld: vi.fn(),
   },
   ipcRenderer: {
-    send: vi.fn(),
+    invoke: vi.fn(),
     on: vi.fn(),
   },
 }));
@@ -17,7 +17,36 @@ describe('Preload', () => {
 
     expect(contextBridge.exposeInMainWorld).toHaveBeenCalledWith(
       'electronAPI',
-      expect.any(Object)
+      expect.objectContaining({
+        importBook: expect.any(Function),
+        getBooks: expect.any(Function),
+        getBook: expect.any(Function),
+        getBookContent: expect.any(Function),
+        saveProgress: expect.any(Function),
+        getProgress: expect.any(Function),
+        settings: expect.objectContaining({
+          save: expect.any(Function),
+          get: expect.any(Function),
+          getAll: expect.any(Function),
+        }),
+      })
     );
+  });
+
+  it('应该只暴露 v0.1 所需的稳定 API', async () => {
+    const { contextBridge } = await import('electron');
+    await import('../../src/preload/index');
+
+    const exposedAPI = vi.mocked(contextBridge.exposeInMainWorld).mock.calls[0][1] as Record<string, unknown>;
+
+    expect(Object.keys(exposedAPI).sort()).toEqual([
+      'getBook',
+      'getBookContent',
+      'getBooks',
+      'getProgress',
+      'importBook',
+      'saveProgress',
+      'settings',
+    ]);
   });
 });
