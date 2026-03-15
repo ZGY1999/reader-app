@@ -270,6 +270,39 @@ describe('Reader', () => {
     expect(screen.getByRole('button', { name: 'Chapter 2' }).getAttribute('aria-current')).toBe('true');
     expect(screen.getByTestId('annotation-ann-2').className).toContain('annotation-active');
     expect(screen.getByTestId('annotation-selection-feedback').textContent).toContain('已选中标注');
+    expect((screen.getByTestId('annotation-focus-ann-2') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('deletes an annotation from the sidebar list', async () => {
+    window.electronAPI.annotations.list = vi.fn().mockResolvedValue([
+      {
+        id: 'ann-1',
+        bookId: 'book-1',
+        startOffset: 0,
+        endOffset: 7,
+        text: 'Chapter',
+        style: 'highlight',
+      },
+    ]);
+
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    fireEvent.click(await screen.findByTestId('annotation-link-ann-1'));
+    fireEvent.click(screen.getByTestId('annotation-delete-ann-1'));
+
+    await waitFor(() => {
+      expect(window.electronAPI.annotations.delete).toHaveBeenCalledWith('ann-1');
+    });
+
+    expect(screen.queryByTestId('annotation-link-ann-1')).toBeNull();
+    expect(screen.queryByTestId('annotation-ann-1')).toBeNull();
+    expect(screen.getByText('当前书籍还没有标注')).toBeDefined();
   });
 
   it('jumps to a chapter when the sidebar entry is clicked', async () => {

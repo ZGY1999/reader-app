@@ -152,14 +152,18 @@ export default function Reader() {
     setSelectedAnnotation(annotation);
   };
 
+  const handleDeleteAnnotationById = async (annotationId: string) => {
+    const result = await api.annotations.delete(annotationId);
+    if (!result.success) return;
+
+    setAnnotations((currentAnnotations) => currentAnnotations.filter((annotation) => annotation.id !== annotationId));
+    setSelectedAnnotation((currentAnnotation) => (currentAnnotation?.id === annotationId ? null : currentAnnotation));
+  };
+
   const handleDeleteAnnotation = async () => {
     if (!selectedAnnotation) return;
 
-    const result = await api.annotations.delete(selectedAnnotation.id);
-    if (!result.success) return;
-
-    setAnnotations((currentAnnotations) => currentAnnotations.filter((annotation) => annotation.id !== selectedAnnotation.id));
-    setSelectedAnnotation(null);
+    await handleDeleteAnnotationById(selectedAnnotation.id);
   };
 
   const handleContentScroll = () => {
@@ -281,25 +285,56 @@ export default function Reader() {
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {annotationEntries.map((annotation) => (
                     <li key={annotation.id}>
-                      <button
-                        type="button"
-                        data-testid={`annotation-link-${annotation.id}`}
-                        onClick={() => handleAnnotationJump(annotation)}
+                      <div
                         style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          cursor: 'pointer',
                           background: selectedAnnotation?.id === annotation.id ? '#fff1b8' : '#fafafa',
                           border: '1px solid #e8e8e8',
                           borderRadius: '6px',
                           padding: '8px 10px',
                         }}
                       >
-                        <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>{annotation.chapterTitle}</div>
-                        <div style={{ fontSize: '13px', color: '#1f1f1f', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {annotation.text}
+                        <button
+                          type="button"
+                          data-testid={`annotation-link-${annotation.id}`}
+                          aria-current={selectedAnnotation?.id === annotation.id ? 'true' : 'false'}
+                          onClick={() => handleAnnotationJump(annotation)}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            background: 'transparent',
+                            border: 'none',
+                            padding: 0,
+                            marginBottom: '8px',
+                          }}
+                        >
+                          <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>{annotation.chapterTitle}</div>
+                          <div style={{ fontSize: '13px', color: '#1f1f1f', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {annotation.text}
+                          </div>
+                        </button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            data-testid={`annotation-focus-${annotation.id}`}
+                            disabled={selectedAnnotation?.id === annotation.id}
+                            onClick={() => handleAnnotationJump(annotation)}
+                            style={{ flex: 1 }}
+                          >
+                            {selectedAnnotation?.id === annotation.id ? '已定位' : '定位'}
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`annotation-delete-${annotation.id}`}
+                            onClick={() => {
+                              void handleDeleteAnnotationById(annotation.id);
+                            }}
+                            style={{ flex: 1 }}
+                          >
+                            删除
+                          </button>
                         </div>
-                      </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
