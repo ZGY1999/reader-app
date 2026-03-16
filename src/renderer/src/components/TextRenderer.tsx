@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { useRef } from 'react';
 import './annotation.css';
 import { Annotation } from '../types';
 
@@ -9,6 +10,7 @@ interface TextRendererProps {
   testId?: string;
   activeAnnotationId?: string;
   highlightRange?: { startOffset: number; endOffset: number } | null;
+  style?: CSSProperties;
   onAnnotate?: (data: { startOffset: number; endOffset: number; text: string; rect: DOMRect }) => void;
   onSelectAnnotation?: (annotation: Annotation) => void;
   onClearSelection?: () => void;
@@ -21,22 +23,57 @@ export default function TextRenderer({
   testId,
   activeAnnotationId,
   highlightRange,
+  style,
   onAnnotate,
   onSelectAnnotation,
   onClearSelection,
 }: TextRendererProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
   const handleMouseUp = () => {
     const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) {
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
       onClearSelection?.();
       return;
     }
     if (!onAnnotate) return;
 
-    const text = selection.toString();
     const range = selection.getRangeAt(0);
-    const startOffset = offsetBase + range.startOffset;
-    const endOffset = offsetBase + range.endOffset;
+    const container = containerRef.current;
+    if (!container) {
+      onClearSelection?.();
+      return;
+    }
+
+    const commonAncestor = range.commonAncestorContainer ?? range.startContainer;
+    if (commonAncestor) {
+      const ancestorNode = commonAncestor.nodeType === Node.TEXT_NODE
+        ? commonAncestor.parentNode
+        : commonAncestor;
+      if (!ancestorNode || !container.contains(ancestorNode)) {
+        onClearSelection?.();
+        return;
+      }
+    }
+
+    const text = selection.toString();
+    if (!text.trim()) {
+      onClearSelection?.();
+      return;
+    }
+
+    let startOffset = offsetBase + range.startOffset;
+    let endOffset = offsetBase + range.endOffset;
+
+    if (range.startContainer && typeof range.cloneRange === 'function') {
+      const prefixRange = range.cloneRange();
+      prefixRange.selectNodeContents(container);
+      prefixRange.setEnd(range.startContainer, range.startOffset);
+
+      startOffset = offsetBase + prefixRange.toString().length;
+      endOffset = startOffset + text.length;
+    }
+
     const rect = range.getBoundingClientRect();
 
     onAnnotate({ startOffset, endOffset, text, rect });
@@ -114,7 +151,12 @@ export default function TextRenderer({
   };
 
   return (
-    <div data-testid={testId} style={{ padding: '20px', lineHeight: '1.8', whiteSpace: 'pre-wrap' }} onMouseUp={handleMouseUp}>
+    <div
+      ref={containerRef}
+      data-testid={testId}
+      style={{ padding: '20px', lineHeight: '1.8', whiteSpace: 'pre-wrap', ...style }}
+      onMouseUp={handleMouseUp}
+    >
       {renderContent()}
     </div>
   );

@@ -1,0 +1,37 @@
+.rich-content-renderer {
+  white-space: normal;
+}
+
+.rich-content-renderer h1,
+.rich-content-renderer h2,
+.rich-content-renderer h3,
+.rich-content-renderer h4 {
+  margin: 0 0 16px;
+  line-height: 1.35;
+}
+
+.rich-content-renderer p {
+  margin: 0 0 16px;
+}
+
+.rich-content-renderer img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 20px auto;
+  border-radius: 10px;
+}
+
+.rich-content-renderer table {
+  width: 100%;
+  margin: 20px 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.rich-content-renderer th,
+.rich-content-renderer td {
+  border: 1px solid rgba(120, 108, 92, 0.25);
+  padding: 10px 12px;
+  text-align: left;
+}

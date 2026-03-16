@@ -20,8 +20,14 @@
 }
 
 .annotation-wavy {
-  text-decoration: underline wavy;
-  text-decoration-color: #52c41a;
+  text-decoration: none;
+  background-image:
+    radial-gradient(circle at 6px calc(100% - 2px), #7aa8ff 2px, transparent 2.2px),
+    radial-gradient(circle at 2px calc(100% - 2px), #7aa8ff 2px, transparent 2.2px);
+  background-size: 8px 6px;
+  background-repeat: repeat-x;
+  background-position: 0 calc(100% - 1px);
+  padding-bottom: 4px;
 }
 
 .annotation-highlight {

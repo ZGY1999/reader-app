@@ -1,0 +1,126 @@
+<h2>阅读页 + 选区工具条 + AI 抽屉</h2>
+<p class="subtitle">第二版：加大 AI 回答区域，把启发性问题沉到底部，并把整体配色调到更接近微信读书的浅底深字风格。</p>
+
+<div class="mockup">
+  <div class="mockup-header">Preview: Reader Layout v2</div>
+  <div class="mockup-body" style="padding:0; background:#f4f2ee;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:18px 24px; border-bottom:1px solid #e7e0d5; background:#f8f7f4;">
+      <div style="display:flex; align-items:center; gap:18px;">
+        <div style="padding:8px 12px; border:1px solid #d7cec0; border-radius:8px; background:#fff; color:#6a6158;">返回书架</div>
+        <div style="font-size:24px; font-weight:700; color:#2f2924;">《帝妃娇》</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:220px; padding:8px 12px; border:1px solid #d7cec0; border-radius:8px; background:#fff; color:#8a8075;">搜索...</div>
+        <div style="padding:8px 14px; border:1px solid #d7cec0; border-radius:8px; background:#fff; color:#5a524a;">工具</div>
+        <div style="padding:8px 14px; border:1px solid #d7cec0; border-radius:8px; background:#fff; color:#5a524a;">设置</div>
+      </div>
+    </div>
+
+    <div style="display:flex; min-height:660px;">
+      <div style="width:250px; border-right:1px solid #ebe3d7; background:#faf9f6; padding:24px 18px;">
+        <div style="font-size:16px; font-weight:700; margin-bottom:18px; color:#2f2924;">目录</div>
+        <div style="display:flex; flex-direction:column; gap:10px; color:#514940;">
+          <div>第一章 坏了！</div>
+          <div style="padding:10px 12px; border-radius:10px; background:#e6efff; color:#2d4e84;">第二章 宇文娘</div>
+          <div>第三章 皇帝</div>
+          <div>第四章 宠妃</div>
+          <div>第五章 合葬</div>
+        </div>
+      </div>
+
+      <div style="flex:1; position:relative; padding:30px 34px 42px; background:#fffdfa;">
+        <div style="max-width:760px; margin:0 auto; color:#3a332d; line-height:1.95; font-size:17px;">
+          <p style="margin-bottom:20px; color:#504840;">
+            已选中：久不舒服。而孟薇玉对自己这位姐姐虽然也并不是那么亲近的，这一点从她的宣女墨玉身上就可以看得出来。
+          </p>
+          <div style="position:absolute; top:90px; left:345px; background:#34363a; color:#fff; border-radius:12px; padding:10px 14px; box-shadow:0 12px 28px rgba(0,0,0,0.16);">
+            <div style="display:flex; gap:16px; align-items:center; font-size:12px;">
+              <div>复制</div>
+              <div>马克笔</div>
+              <div>波浪线</div>
+              <div>直线</div>
+              <div style="color:#ffd27a;">AI问书</div>
+            </div>
+          </div>
+          <p style="background:#d7ebff; display:inline; box-shadow:0 0 0 5px #d7ebff; color:#2e3b4b;">
+            久不舒服。而孟薇玉对自己这位姐姐虽然也并不是那么亲近的，这一点从她的宣女墨玉身上就可以看得出来。
+          </p>
+          <p style="margin-top:28px;">
+            因为此时眼在她身边的人实在太多，不仅这些护卫宫人是眼线，就是后宫那些娘娘各自安插在此的，也未必没有。
+          </p>
+          <p>
+            这样处理之后，阅读页常态下只保留正文、目录、搜索、设置，不再被 AI 和 TTS 占掉上方空间。
+          </p>
+        </div>
+
+        <div style="position:absolute; right:0; top:0; width:420px; height:100%; border-left:1px solid #e7dfd3; background:#f7f5f1; box-shadow:-16px 0 28px rgba(0,0,0,0.06); display:flex; flex-direction:column;">
+          <div style="padding:20px 22px 14px; border-bottom:1px solid #ece4d8;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div>
+                <div style="font-size:22px; font-weight:700; color:#2f2924; margin-bottom:4px;">AI 问书</div>
+                <div style="font-size:12px; color:#8a8177;">《帝妃娇》 · 当前选中文本</div>
+              </div>
+              <div style="padding:6px 10px; border:1px solid #d7cec0; border-radius:999px; background:#fff; color:#7d7469;">关闭</div>
+            </div>
+          </div>
+
+          <div style="padding:16px 16px 14px; display:flex; flex-direction:column; gap:12px; flex:1; min-height:0;">
+            <div style="background:#dceeff; border:1px solid #c9def4; border-radius:14px; padding:14px 16px; color:#31404d; line-height:1.75; font-size:14px;">
+              格雷厄姆和多德传统估值方法的第二步是计算公司的盈利能力价值，这个价值基于可持续的当前盈利能力。
+            </div>
+
+            <div style="background:#fff; border:1px solid #e8dfd3; border-radius:16px; padding:16px 16px 18px; flex:1; min-height:290px; display:flex; flex-direction:column;">
+              <div style="font-size:13px; color:#7d7469; margin-bottom:10px;">回答</div>
+              <div style="color:#39322c; line-height:1.92; font-size:15px; flex:1;">
+                <div style="margin-bottom:10px;">
+                  <strong>核心含义</strong>
+                </div>
+                <div style="margin-bottom:10px;">
+                  盈利能力价值衡量的是：如果这家公司当前的盈利水平可以持续下去，那么这些盈利折算成今天大约值多少钱。
+                </div>
+                <div style="margin-bottom:10px;">
+                  它和“资产价值”不同，资产价值看的是“把厂房、设备、存货单独卖掉值多少钱”；盈利能力价值看的是“企业继续经营，能稳定带来多少现金流”。
+                </div>
+                <div>
+                  所以这段实际上是在强调：对企业估值时，不能只看账面资产，还要看企业持续赚钱的能力。
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              <div style="padding:10px 14px; border-radius:999px; background:#fff; border:1px solid #e6ddd2; color:#5c544c; font-size:13px;">这段和资产价值有什么区别？</div>
+              <div style="padding:10px 14px; border-radius:999px; background:#fff; border:1px solid #e6ddd2; color:#5c544c; font-size:13px;">为什么这里强调可持续盈利？</div>
+              <div style="padding:10px 14px; border-radius:999px; background:#fff; border:1px solid #e6ddd2; color:#5c544c; font-size:13px;">用更通俗的话重讲一遍</div>
+            </div>
+
+            <div style="display:flex; gap:10px; align-items:flex-end;">
+              <div style="flex:1; background:#fff; border:1px solid #d7cec0; border-radius:16px; padding:14px 16px; color:#9b9085;">
+                提出问题，获得来自书籍的解答...
+              </div>
+              <div style="width:42px; height:42px; border-radius:50%; background:#44a6ff;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="options">
+    <div class="option" data-choice="confirm-v2" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>按这个第二版继续实现</h3>
+        <p>回答区域更大，预设问题沉到底部，整体对比度更像微信读书。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="adjust-v2" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>还要继续调</h3>
+        <p>如果你还想改抽屉宽度、字体大小、工具条样式，我继续出第三版。</p>
+      </div>
+    </div>
+  </div>
+</div>

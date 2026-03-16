@@ -1,6 +1,8 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AnnotationToolbar from '../components/AnnotationToolbar';
+import PdfDocumentView from '../components/PdfDocumentView';
+import RichContentRenderer from '../components/RichContentRenderer';
 import TextRenderer from '../components/TextRenderer';
 import { api } from '../api';
 import { useBookStore } from '../store';
@@ -42,6 +44,24 @@ interface ReaderAIContext {
   text: string;
 }
 
+interface ReadingSettings {
+  fontSize: number;
+  lineHeight: string;
+  theme: 'light' | 'dark';
+}
+
+interface FooterMetrics {
+  currentPage: number;
+  totalPages: number;
+  progressPercent: number;
+}
+
+const defaultReadingSettings: ReadingSettings = {
+  fontSize: 16,
+  lineHeight: '1.8',
+  theme: 'light',
+};
+
 export default function Reader() {
   const navigate = useNavigate();
   const currentBook = useBookStore((state) => state.currentBook);
@@ -58,7 +78,7 @@ export default function Reader() {
   const [aiCitations, setAICitations] = useState<AICitation[]>([]);
   const [aiError, setAIError] = useState('');
   const [aiLoading, setAILoading] = useState(false);
-  const [showAIDrawer, setShowAIDrawer] = useState(false);
+  const [showToolsDrawer, setShowToolsDrawer] = useState(false);
   const [ttsState, setTTSState] = useState<TTSState>({
     status: 'idle',
     sourceLabel: '当前章节',
@@ -69,10 +89,17 @@ export default function Reader() {
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingOffset, setPendingOffset] = useState<number | null>(null);
   const [selectionToolbarPosition, setSelectionToolbarPosition] = useState<{ top: number; left: number } | null>(null);
+  const [readingSettings, setReadingSettings] = useState<ReadingSettings>(defaultReadingSettings);
+  const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
+  const [footerMetrics, setFooterMetrics] = useState<FooterMetrics>({
+    currentPage: 1,
+    totalPages: 1,
+    progressPercent: 0,
+  });
   const contentContainerRef = useRef<HTMLDivElement | null>(null);
   const chapterSectionRefs = useRef<Record<string, HTMLElement | null>>({});
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const selectionToolbarRef = useRef<HTMLDivElement | null>(null);
 
   const chapterRanges = useMemo(() => {
     let searchFrom = 0;
@@ -138,6 +165,41 @@ export default function Reader() {
     return orderedGroups;
   }, [annotationEntries, chapterRanges]);
 
+  const isPdfBook = currentBook?.format === 'pdf';
+  const isRichEpubBook = currentBook?.format === 'epub' && chapters.some((chapter) => !!chapter.markup);
+  const isAnnotationEnabled = currentBook?.format === 'txt' || currentBook?.format === 'epub' || currentBook?.format === 'pdf';
+
+  const sidebarChapters = useMemo(() => {
+    if (!isPdfBook) {
+      return chapterRanges;
+    }
+
+    const tocEntries = chapterRanges.filter((chapter) => !!chapter.tocTitle);
+    return tocEntries.length > 0 ? tocEntries : chapterRanges;
+  }, [chapterRanges, isPdfBook]);
+
+  const activeSidebarChapterId = useMemo(() => {
+    if (!isPdfBook || !currentChapterId) {
+      return currentChapterId;
+    }
+
+    const currentPageIndex = chapterRanges.findIndex((chapter) => chapter.id === currentChapterId);
+    if (currentPageIndex < 0) {
+      return sidebarChapters[0]?.id ?? currentChapterId;
+    }
+
+    let activeId = sidebarChapters[0]?.id ?? currentChapterId;
+
+    sidebarChapters.forEach((chapter) => {
+      const entryIndex = chapterRanges.findIndex((rangeChapter) => rangeChapter.id === chapter.id);
+      if (entryIndex <= currentPageIndex) {
+        activeId = chapter.id;
+      }
+    });
+
+    return activeId;
+  }, [chapterRanges, currentChapterId, isPdfBook, sidebarChapters]);
+
   const aiContext = useMemo<ReaderAIContext>(() => {
     if (pendingSelection) {
       return {
@@ -173,17 +235,52 @@ export default function Reader() {
     '用更通俗的语言解释一下',
   ], []);
 
+  const themePalette = useMemo(() => {
+    if (readingSettings.theme === 'dark') {
+      return {
+        shellBg: '#171311',
+        panelBg: '#201b18',
+        contentBg: '#191512',
+        drawerBg: '#241f1b',
+        text: '#efe5d7',
+        subText: '#b7ab9c',
+        border: '#3b332d',
+        accentBg: '#2e3f52',
+        accentBorder: '#42566d',
+        accentText: '#d8e8f8',
+        chapterActive: '#2c3d51',
+        cardBg: '#221d1a',
+      };
+    }
+
+    return {
+      shellBg: '#f5f1e8',
+      panelBg: '#fbf8f3',
+      contentBg: '#fffdf9',
+      drawerBg: '#f7f5f1',
+      text: '#2f2924',
+      subText: '#7c7368',
+      border: '#e6ded2',
+      accentBg: '#dceeff',
+      accentBorder: '#c9def4',
+      accentText: '#31404d',
+      chapterActive: '#e8f0ff',
+      cardBg: '#ffffff',
+    };
+  }, [readingSettings.theme]);
+
   useEffect(() => {
     if (!currentBook) return;
 
     let disposed = false;
 
     const loadReading = async () => {
-      const [payload, savedProgress, savedAnnotations, aiStatus] = await Promise.all([
+      const [payload, savedProgress, savedAnnotations, aiStatus, settings] = await Promise.all([
         api.getBookContent(currentBook.id),
         api.getProgress(currentBook.id),
         api.annotations.list(currentBook.id),
         api.ai.getStatus(),
+        api.settings.getAll(),
       ]);
 
       if (disposed) return;
@@ -191,6 +288,7 @@ export default function Reader() {
       setReading(payload);
       setContent(payload.content);
       setChapters(payload.chapters || []);
+      setPdfData(payload.pdfData ?? null);
       setAnnotations(savedAnnotations);
       setCurrentChapterId(savedProgress?.chapterId ?? payload.chapters?.[0]?.id ?? null);
       setPendingSelection(null);
@@ -201,7 +299,7 @@ export default function Reader() {
       setAICitations([]);
       setAIError('');
       setAILoading(false);
-      setShowAIDrawer(false);
+      setShowToolsDrawer(false);
       setTTSState({
         status: 'idle',
         sourceLabel: payload.chapters?.[0]?.title ?? '当前章节',
@@ -210,6 +308,11 @@ export default function Reader() {
       setTTSHighlightRange(null);
       setPendingOffset(savedProgress?.offset ?? null);
       setSelectionToolbarPosition(null);
+      setReadingSettings({
+        fontSize: Number(settings.fontSize || defaultReadingSettings.fontSize),
+        lineHeight: settings.lineHeight || defaultReadingSettings.lineHeight,
+        theme: settings.theme === 'dark' ? 'dark' : 'light',
+      });
     };
 
     void loadReading();
@@ -219,24 +322,64 @@ export default function Reader() {
     };
   }, [currentBook, setReading]);
 
+  const updateFooterMetrics = (scrollContainer: HTMLDivElement) => {
+    const viewportHeight = Math.max(scrollContainer.clientHeight, 1);
+    const maxOffset = Math.max(scrollContainer.scrollHeight - viewportHeight, 0);
+    const currentPage = Math.max(1, Math.floor(scrollContainer.scrollTop / viewportHeight) + 1);
+    const totalPages = Math.max(1, Math.ceil(scrollContainer.scrollHeight / viewportHeight));
+    const progressPercent = maxOffset === 0 ? 0 : Number(((scrollContainer.scrollTop / maxOffset) * 100).toFixed(1));
+
+    setFooterMetrics({
+      currentPage: Math.min(currentPage, totalPages),
+      totalPages,
+      progressPercent,
+    });
+  };
+
+  useEffect(() => {
+    if (!contentContainerRef.current) return;
+    updateFooterMetrics(contentContainerRef.current);
+  }, [chapterRanges, showToolsDrawer]);
+
   useEffect(() => {
     if (pendingOffset === null || !contentContainerRef.current) return;
 
-    contentContainerRef.current.scrollTop = pendingOffset;
-    syncCurrentChapter(pendingOffset);
+    const scrollContainer = contentContainerRef.current;
+    let nextOffset = pendingOffset;
+
+    if (isPdfBook && currentChapterId) {
+      const targetSection = chapterSectionRefs.current[currentChapterId];
+      if (targetSection && pendingOffset <= chapterRanges.length) {
+        nextOffset = targetSection.offsetTop;
+      }
+    }
+
+    scrollContainer.scrollTop = nextOffset;
+    syncCurrentChapter(nextOffset);
+    updateFooterMetrics(scrollContainer);
     setPendingOffset(null);
-  }, [chapterRanges, pendingOffset]);
+  }, [chapterRanges, currentChapterId, isPdfBook, pendingOffset]);
+
+  useEffect(() => {
+    if (!pendingSelection) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (selectionToolbarRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      clearActiveAnnotationState();
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [pendingSelection]);
 
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      if (audioUrlRef.current) {
-        URL.revokeObjectURL(audioUrlRef.current);
-        audioUrlRef.current = null;
-      }
+      window.speechSynthesis?.cancel?.();
+      utteranceRef.current = null;
     };
   }, []);
 
@@ -269,8 +412,8 @@ export default function Reader() {
     setSelectedAnnotation(null);
     setPendingSelection(selection);
     setSelectionToolbarPosition({
-      top: Math.max(selection.rect.top - 56, 16),
-      left: Math.max(selection.rect.left, 16),
+      top: Math.max(selection.rect.top - 60, 16),
+      left: Math.max(selection.rect.left + selection.rect.width / 2, 32),
     });
   };
 
@@ -283,18 +426,34 @@ export default function Reader() {
   const handleAnnotate = async (style: string) => {
     if (!currentBook || !pendingSelection) return;
 
+    const optimisticAnnotation: Annotation = {
+      id: `pending-${Date.now()}`,
+      bookId: currentBook.id,
+      startOffset: pendingSelection.startOffset,
+      endOffset: pendingSelection.endOffset,
+      text: pendingSelection.text,
+      style,
+    };
+
+    setAnnotations((currentAnnotations) => [...currentAnnotations, optimisticAnnotation]);
+    setPendingSelection(null);
+    setSelectedAnnotation(null);
+    setSelectionToolbarPosition(null);
+
     const result = await api.annotations.create({
       bookId: currentBook.id,
       ...pendingSelection,
       style,
     });
 
-    if (!result.success) return;
+    if (!result.success) {
+      setAnnotations((currentAnnotations) => currentAnnotations.filter((annotation) => annotation.id !== optimisticAnnotation.id));
+      return;
+    }
 
-    setAnnotations((currentAnnotations) => [...currentAnnotations, result.annotation]);
-    setPendingSelection(null);
-    setSelectedAnnotation(null);
-    setSelectionToolbarPosition(null);
+    setAnnotations((currentAnnotations) => currentAnnotations.map((annotation) => (
+      annotation.id === optimisticAnnotation.id ? result.annotation : annotation
+    )));
   };
 
   const handleSelectAnnotation = (annotation: Annotation) => {
@@ -324,9 +483,13 @@ export default function Reader() {
     setSelectionToolbarPosition(null);
   };
 
-  const handleOpenAIDrawer = () => {
-    setShowAIDrawer(true);
+  const openToolsDrawer = () => {
+    setShowToolsDrawer(true);
     setSelectionToolbarPosition(null);
+  };
+
+  const handleOpenAIDrawer = () => {
+    openToolsDrawer();
     setAIError('');
     setAIAnswer('');
     setAICitations([]);
@@ -364,16 +527,15 @@ export default function Reader() {
     }
   };
 
-  const releaseAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-
-    if (audioUrlRef.current) {
-      URL.revokeObjectURL(audioUrlRef.current);
-      audioUrlRef.current = null;
-    }
+  const stopSpeech = (preserveError = false) => {
+    window.speechSynthesis?.cancel?.();
+    utteranceRef.current = null;
+    setTTSHighlightRange(null);
+    setTTSState((current) => ({
+      status: 'idle',
+      sourceLabel: current.sourceLabel,
+      error: preserveError ? current.error : '',
+    }));
   };
 
   const resolveTTSTarget = (): TTSTarget | null => {
@@ -421,15 +583,9 @@ export default function Reader() {
     };
   };
 
-  const updateTTSHighlight = (audio: HTMLAudioElement, target: TTSTarget) => {
-    if (!audio.duration || Number.isNaN(audio.duration) || audio.duration <= 0) {
-      return;
-    }
-
-    const ratio = Math.min(Math.max(audio.currentTime / audio.duration, 0), 1);
-    const spanLength = Math.max(target.endOffset - target.startOffset, 1);
-    const rangeStart = target.startOffset + Math.floor(spanLength * ratio);
-    const rangeEnd = Math.min(target.endOffset, rangeStart + 15);
+  const updateTTSHighlight = (target: TTSTarget, charIndex: number, charLength = 12) => {
+    const rangeStart = Math.min(target.startOffset + charIndex, target.endOffset);
+    const rangeEnd = Math.min(target.endOffset, rangeStart + Math.max(charLength, 1));
 
     setTTSHighlightRange({
       startOffset: rangeStart,
@@ -437,15 +593,44 @@ export default function Reader() {
     });
   };
 
-  const handlePlayTTS = async () => {
-    const target = resolveTTSTarget();
+  const findSpeechVoice = (voiceName?: string) => {
+    const voices = window.speechSynthesis?.getVoices?.() ?? [];
+    if (!voiceName) {
+      return voices[0] ?? null;
+    }
+
+    const exactVoice = voices.find((voice) => voice.name === voiceName);
+    if (exactVoice) {
+      return exactVoice;
+    }
+
+    const localeMatch = voiceName.match(/[A-Za-z]{2}-[A-Za-z]{2}/)?.[0];
+    if (localeMatch) {
+      return voices.find((voice) => voice.lang === localeMatch) ?? null;
+    }
+
+    return voices[0] ?? null;
+  };
+
+  const handlePlayTTS = async (explicitTarget?: TTSTarget | null) => {
+    const target = explicitTarget ?? resolveTTSTarget();
     if (!target?.text.trim()) {
       setTTSState({ status: 'idle', sourceLabel: '当前章节', error: '当前没有可朗读的文本' });
       setTTSHighlightRange(null);
       return;
     }
 
-    releaseAudio();
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') {
+      setTTSState({
+        status: 'idle',
+        sourceLabel: target.sourceLabel,
+        error: '当前环境不支持系统朗读',
+      });
+      setTTSHighlightRange(null);
+      return;
+    }
+
+    stopSpeech();
     setTTSState({
       status: 'loading',
       sourceLabel: target.sourceLabel,
@@ -458,48 +643,64 @@ export default function Reader() {
 
     try {
       const settings = await api.settings.getAll();
-      const audioBytes = await api.tts.synthesize({
-        text: target.text,
-        voice: settings.ttsVoice || undefined,
-        rate: settings.ttsRate ? Number(settings.ttsRate) : 1,
-      });
-      const normalizedBytes = audioBytes instanceof Uint8Array ? audioBytes : new Uint8Array(audioBytes as ArrayLike<number>);
-      const audioPayload = Uint8Array.from(normalizedBytes);
-      const audioUrl = URL.createObjectURL(new Blob([audioPayload], { type: 'audio/mpeg' }));
-      const audio = new Audio(audioUrl);
+      const utterance = new SpeechSynthesisUtterance(target.text);
+      const rate = settings.ttsRate ? Number(settings.ttsRate) : 1;
+      const voice = findSpeechVoice(settings.ttsVoice || undefined);
 
-      audioRef.current = audio;
-      audioUrlRef.current = audioUrl;
+      utterance.rate = Number.isFinite(rate) ? rate : 1;
+      if (voice) {
+        utterance.voice = voice;
+        utterance.lang = voice.lang;
+      }
 
-      audio.addEventListener('timeupdate', () => updateTTSHighlight(audio, target));
-      audio.addEventListener('ended', () => {
-        setTTSState({
-          status: 'idle',
-          sourceLabel: target.sourceLabel,
-          error: '',
-        });
-        setTTSHighlightRange(null);
-      });
-      audio.addEventListener('pause', () => {
-        if (audio.ended) return;
-        setTTSState((current) => ({
-          status: current.status === 'idle' ? 'idle' : 'paused',
-          sourceLabel: target.sourceLabel,
-          error: current.error,
-        }));
-      });
-      audio.addEventListener('play', () => {
+      utterance.onstart = () => {
         setTTSState({
           status: 'playing',
           sourceLabel: target.sourceLabel,
           error: '',
         });
-      });
+      };
+      utterance.onpause = () => {
+        setTTSState((current) => ({
+          status: current.status === 'idle' ? 'idle' : 'paused',
+          sourceLabel: target.sourceLabel,
+          error: current.error,
+        }));
+      };
+      utterance.onresume = () => {
+        setTTSState({
+          status: 'playing',
+          sourceLabel: target.sourceLabel,
+          error: '',
+        });
+      };
+      utterance.onboundary = (event) => {
+        updateTTSHighlight(target, event.charIndex, event.charLength ?? 12);
+      };
+      utterance.onend = () => {
+        utteranceRef.current = null;
+        setTTSHighlightRange(null);
+        setTTSState({
+          status: 'idle',
+          sourceLabel: target.sourceLabel,
+          error: '',
+        });
+      };
+      utterance.onerror = (event) => {
+        utteranceRef.current = null;
+        setTTSHighlightRange(null);
+        setTTSState({
+          status: 'idle',
+          sourceLabel: target.sourceLabel,
+          error: event.error || 'TTS 播放失败',
+        });
+      };
 
-      await audio.play();
-      updateTTSHighlight(audio, target);
+      utteranceRef.current = utterance;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
     } catch (error) {
-      releaseAudio();
+      utteranceRef.current = null;
       setTTSHighlightRange(null);
       setTTSState({
         status: 'idle',
@@ -509,23 +710,22 @@ export default function Reader() {
     }
   };
 
+  const handleSpeakSelection = () => {
+    const target = resolveTTSTarget();
+    clearActiveAnnotationState();
+    void handlePlayTTS(target);
+  };
+
   const handlePauseTTS = () => {
-    audioRef.current?.pause();
+    window.speechSynthesis?.pause?.();
   };
 
   const handleResumeTTS = async () => {
-    if (!audioRef.current) return;
-    await audioRef.current.play();
+    window.speechSynthesis?.resume?.();
   };
 
   const handleStopTTS = () => {
-    releaseAudio();
-    setTTSHighlightRange(null);
-    setTTSState((current) => ({
-      status: 'idle',
-      sourceLabel: current.sourceLabel,
-      error: '',
-    }));
+    stopSpeech();
   };
 
   const getChapterTTSHighlight = (chapterId: string) => {
@@ -549,6 +749,7 @@ export default function Reader() {
     const offset = scrollContainer.scrollTop;
     const progress = maxOffset === 0 ? 0 : offset / maxOffset;
     const chapterId = syncCurrentChapter(offset) ?? chapterRanges[0]?.id;
+    updateFooterMetrics(scrollContainer);
 
     void api.saveProgress({
       bookId: currentBook.id,
@@ -561,10 +762,19 @@ export default function Reader() {
   const handleChapterJump = (chapterId: string) => {
     const scrollContainer = contentContainerRef.current;
     const section = chapterSectionRefs.current[chapterId];
-    if (!scrollContainer || !section) return;
+    if (!scrollContainer || !section || !currentBook) return;
 
     scrollContainer.scrollTop = section.offsetTop;
     setCurrentChapterId(chapterId);
+    updateFooterMetrics(scrollContainer);
+    const maxOffset = Math.max(scrollContainer.scrollHeight - scrollContainer.clientHeight, 0);
+
+    void api.saveProgress({
+      bookId: currentBook.id,
+      chapterId,
+      offset: section.offsetTop,
+      progress: maxOffset === 0 ? 0 : section.offsetTop / maxOffset,
+    });
   };
 
   const handleAnnotationJump = (annotation: Annotation) => {
@@ -585,11 +795,13 @@ export default function Reader() {
     if (section) {
       const nextOffset = Math.max(section.offsetTop + (annotationElement?.offsetTop ?? 0) - 24, 0);
       scrollContainer.scrollTop = nextOffset;
+      updateFooterMetrics(scrollContainer);
       return;
     }
 
     if (annotationElement) {
       scrollContainer.scrollTop = Math.max(annotationElement.offsetTop - 24, 0);
+      updateFooterMetrics(scrollContainer);
     }
   };
 
@@ -606,16 +818,49 @@ export default function Reader() {
       }));
   };
 
+  const getChapterPendingSelection = (chapterId: string) => {
+    if (!pendingSelection) return null;
+
+    const chapter = chapterRanges.find((item) => item.id === chapterId);
+    if (!chapter) return null;
+    if (pendingSelection.endOffset <= chapter.startOffset || pendingSelection.startOffset >= chapter.endOffset) {
+      return null;
+    }
+
+    return {
+      startOffset: Math.max(pendingSelection.startOffset - chapter.startOffset, 0),
+      endOffset: Math.min(pendingSelection.endOffset - chapter.startOffset, chapter.content.length),
+    };
+  };
+
   if (!currentBook) return <div>请选择书籍</div>;
+
+  const readerTextStyle = {
+    fontSize: `${readingSettings.fontSize}px`,
+    lineHeight: readingSettings.lineHeight,
+    color: themePalette.text,
+    fontFamily: '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif',
+  };
+
+  const currentPdfPage = isPdfBook
+    ? Math.max(chapterRanges.findIndex((chapter) => chapter.id === currentChapterId) + 1, 1)
+    : footerMetrics.currentPage;
+  const totalPdfPages = isPdfBook ? Math.max(chapterRanges.length, 1) : footerMetrics.totalPages;
+  const pdfProgressPercent = footerMetrics.progressPercent;
+
+  const footerLabel = `第 ${currentPdfPage} / ${totalPdfPages} 页`;
+  const progressLabel = `${pdfProgressPercent.toFixed(1)}%`;
 
   return (
     <div
+      data-testid="reader-shell"
+      data-theme={readingSettings.theme}
       style={{
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
-        background: '#f5f1e8',
-        color: '#2f2924',
+        background: themePalette.shellBg,
+        color: themePalette.text,
         fontFamily: '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif',
       }}
     >
@@ -624,8 +869,8 @@ export default function Reader() {
           display: 'flex',
           alignItems: 'center',
           padding: '14px 18px',
-          borderBottom: '1px solid #e6ded2',
-          background: '#fbf8f3',
+          borderBottom: `1px solid ${themePalette.border}`,
+          background: themePalette.panelBg,
           gap: '12px',
         }}
       >
@@ -638,33 +883,34 @@ export default function Reader() {
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{ marginRight: '4px', padding: '8px 10px' }}
         />
-        <button type="button" onClick={handleOpenAIDrawer}>工具</button>
+        <button type="button" onClick={openToolsDrawer}>工具</button>
         <button onClick={() => navigate('/settings')}>设置</button>
       </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {showSidebar && (
-          <div style={{ width: '250px', borderRight: '1px solid #ddd', overflowY: 'auto', padding: '10px' }}>
+          <div style={{ width: '250px', borderRight: `1px solid ${themePalette.border}`, overflowY: 'auto', padding: '10px', background: themePalette.panelBg }}>
             <h3>目录</h3>
-            {chapterRanges.length > 0 ? (
+            {sidebarChapters.length > 0 ? (
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {chapterRanges.map((chapter) => (
+                {sidebarChapters.map((chapter) => (
                   <li key={chapter.id} style={{ padding: '5px 0' }}>
                     <button
                       type="button"
-                      aria-current={currentChapterId === chapter.id ? 'true' : 'false'}
+                      aria-current={activeSidebarChapterId === chapter.id ? 'true' : 'false'}
                       onClick={() => handleChapterJump(chapter.id)}
                       style={{
                         width: '100%',
                         textAlign: 'left',
                         cursor: 'pointer',
-                        background: currentChapterId === chapter.id ? '#e8f0ff' : 'transparent',
+                        background: activeSidebarChapterId === chapter.id ? themePalette.chapterActive : 'transparent',
+                        color: themePalette.text,
                         border: 'none',
                         padding: '6px 8px',
                         borderRadius: '4px',
                       }}
                     >
-                      {chapter.title}
+                      {chapter.tocTitle ?? chapter.title}
                     </button>
                   </li>
                 ))}
@@ -673,15 +919,17 @@ export default function Reader() {
               <p>无章节信息</p>
             )}
 
-            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #eee' }}>
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: `1px solid ${themePalette.border}` }}>
               <h3 style={{ margin: '0 0 8px' }}>标注</h3>
-              {annotationGroups.length > 0 ? (
+              {!isAnnotationEnabled ? (
+                <p style={{ margin: 0, color: themePalette.subText, fontSize: '13px' }}>当前阅读模式暂不支持标注</p>
+              ) : annotationGroups.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {annotationGroups.map((group) => (
                     <section key={group.id}>
                       <div
                         data-testid={`annotation-group-title-${group.id}`}
-                        style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}
+                        style={{ fontSize: '12px', color: themePalette.subText, marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}
                       >
                         <span>{group.title}</span>
                         <span>{group.annotations.length}</span>
@@ -691,8 +939,8 @@ export default function Reader() {
                           <li key={annotation.id}>
                             <div
                               style={{
-                                background: selectedAnnotation?.id === annotation.id ? '#fff1b8' : '#fafafa',
-                                border: '1px solid #e8e8e8',
+                                background: selectedAnnotation?.id === annotation.id ? '#fff1b8' : themePalette.cardBg,
+                                border: `1px solid ${themePalette.border}`,
                                 borderRadius: '6px',
                                 padding: '8px 10px',
                               }}
@@ -712,7 +960,7 @@ export default function Reader() {
                                   marginBottom: '8px',
                                 }}
                               >
-                                <div style={{ fontSize: '13px', color: '#1f1f1f', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <div style={{ fontSize: '13px', color: themePalette.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {annotation.text}
                                 </div>
                               </button>
@@ -745,21 +993,45 @@ export default function Reader() {
                   ))}
                 </div>
               ) : (
-                <p style={{ margin: 0, color: '#8c8c8c', fontSize: '13px' }}>当前书籍还没有标注</p>
+                <p style={{ margin: 0, color: themePalette.subText, fontSize: '13px' }}>当前书籍还没有标注</p>
               )}
             </div>
           </div>
         )}
 
-        <div style={{ flex: 1, display: 'flex', minWidth: 0, position: 'relative', background: '#fffdf9' }}>
-          <div style={{ flex: showAIDrawer ? '1 1 calc(100% - 420px)' : '1 1 100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ flex: 1, display: 'flex', minWidth: 0, position: 'relative', background: themePalette.contentBg }}>
+          <div style={{ flex: showToolsDrawer ? '1 1 calc(100% - 420px)' : '1 1 100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <div
               ref={contentContainerRef}
               data-testid="reader-scroll-container"
               onScroll={handleContentScroll}
               style={{ flex: 1, overflowY: 'auto' }}
             >
-              {chapterRanges.length > 0 ? (
+              {isPdfBook ? (
+                <div style={{ padding: '20px 0' }}>
+                  <PdfDocumentView
+                    documentData={pdfData ?? undefined}
+                    pages={chapterRanges.map((chapter, index) => ({
+                      id: chapter.id,
+                      title: chapter.title,
+                      pageNumber: index + 1,
+                      startOffset: chapter.startOffset,
+                      content: chapter.content,
+                      annotations: getChapterAnnotations(chapter.id),
+                      pendingSelectionRange: getChapterPendingSelection(chapter.id),
+                      highlightRange: getChapterTTSHighlight(chapter.id),
+                    }))}
+                    scrollContainer={contentContainerRef.current}
+                    activeAnnotationId={selectedAnnotation?.id}
+                    onAnnotate={handleSelectionCaptured}
+                    onSelectAnnotation={handleSelectAnnotation}
+                    onClearSelection={clearActiveAnnotationState}
+                    onSectionRef={(pageId, element) => {
+                      chapterSectionRefs.current[pageId] = element;
+                    }}
+                  />
+                </div>
+              ) : chapterRanges.length > 0 ? (
                 <div style={{ padding: '20px' }}>
                   {chapterRanges.map((chapter) => (
                     <section
@@ -770,18 +1042,33 @@ export default function Reader() {
                       data-testid={`chapter-section-${chapter.id}`}
                       style={{ marginBottom: '32px' }}
                     >
-                      <h3 style={{ margin: '0 0 12px', color: '#3a332d' }}>{chapter.title}</h3>
-                      <TextRenderer
-                        testId={`text-renderer-${chapter.id}`}
-                        content={chapter.content}
-                        offsetBase={chapter.startOffset}
-                        annotations={getChapterAnnotations(chapter.id)}
-                        activeAnnotationId={selectedAnnotation?.id}
-                        highlightRange={getChapterTTSHighlight(chapter.id)}
-                        onAnnotate={handleSelectionCaptured}
-                        onSelectAnnotation={handleSelectAnnotation}
-                        onClearSelection={clearActiveAnnotationState}
-                      />
+                      <h3 style={{ margin: '0 0 12px', color: themePalette.text }}>{chapter.title}</h3>
+                      {isRichEpubBook && chapter.markup ? (
+                        <RichContentRenderer
+                          testId={`rich-content-renderer-${chapter.id}`}
+                          markup={chapter.markup}
+                          annotations={getChapterAnnotations(chapter.id)}
+                          offsetBase={chapter.startOffset}
+                          activeAnnotationId={selectedAnnotation?.id}
+                          onSelectAnnotation={isAnnotationEnabled ? handleSelectAnnotation : undefined}
+                          onAnnotate={handleSelectionCaptured}
+                          onClearSelection={clearActiveAnnotationState}
+                          style={readerTextStyle}
+                        />
+                      ) : (
+                        <TextRenderer
+                          testId={`text-renderer-${chapter.id}`}
+                          content={chapter.content}
+                          offsetBase={chapter.startOffset}
+                          annotations={getChapterAnnotations(chapter.id)}
+                          activeAnnotationId={selectedAnnotation?.id}
+                          highlightRange={getChapterTTSHighlight(chapter.id)}
+                          style={readerTextStyle}
+                          onAnnotate={isAnnotationEnabled ? handleSelectionCaptured : undefined}
+                          onSelectAnnotation={isAnnotationEnabled ? handleSelectAnnotation : undefined}
+                          onClearSelection={clearActiveAnnotationState}
+                        />
+                      )}
                     </section>
                   ))}
                 </div>
@@ -790,8 +1077,9 @@ export default function Reader() {
                   content={content}
                   activeAnnotationId={selectedAnnotation?.id}
                   highlightRange={ttsHighlightRange}
-                  onAnnotate={handleSelectionCaptured}
-                  onSelectAnnotation={handleSelectAnnotation}
+                  style={readerTextStyle}
+                  onAnnotate={isAnnotationEnabled ? handleSelectionCaptured : undefined}
+                  onSelectAnnotation={isAnnotationEnabled ? handleSelectAnnotation : undefined}
                   onClearSelection={clearActiveAnnotationState}
                 />
               )}
@@ -799,21 +1087,26 @@ export default function Reader() {
           </div>
 
           {pendingSelection && selectionToolbarPosition ? (
-            <AnnotationToolbar
-              mode="selection"
-              onAnnotate={handleAnnotate}
-              onCopySelection={() => void handleCopySelection()}
-              onAskAI={handleOpenAIDrawer}
-              style={{
-                position: 'absolute',
-                top: `${selectionToolbarPosition.top}px`,
-                left: `${selectionToolbarPosition.left}px`,
-                zIndex: 20,
-              }}
-            />
+            <div ref={selectionToolbarRef}>
+              <AnnotationToolbar
+                mode="selection"
+                onAnnotate={handleAnnotate}
+                onCopySelection={() => void handleCopySelection()}
+                onAskAI={handleOpenAIDrawer}
+                onSpeakSelection={handleSpeakSelection}
+                annotationActionsEnabled={isAnnotationEnabled}
+                style={{
+                  position: 'fixed',
+                  top: `${selectionToolbarPosition.top}px`,
+                  left: `${selectionToolbarPosition.left}px`,
+                  transform: 'translateX(-50%)',
+                  zIndex: 20,
+                }}
+              />
+            </div>
           ) : null}
 
-          {selectedAnnotation ? (
+          {selectedAnnotation && isAnnotationEnabled ? (
             <AnnotationToolbar
               mode="annotation"
               onAnnotate={handleAnnotate}
@@ -822,35 +1115,41 @@ export default function Reader() {
               style={{
                 position: 'absolute',
                 top: '24px',
-                right: showAIDrawer ? '444px' : '24px',
+                right: showToolsDrawer ? '444px' : '24px',
                 zIndex: 20,
               }}
-            />
+              />
           ) : null}
 
-          {showAIDrawer ? (
+          {showToolsDrawer ? (
             <aside
-              data-testid="ai-drawer"
+              data-testid="tools-drawer"
               style={{
                 width: '428px',
-                borderLeft: '1px solid #e7dfd3',
-                background: '#f7f5f1',
+                borderLeft: `1px solid ${themePalette.border}`,
+                background: themePalette.drawerBg,
                 boxShadow: '-16px 0 28px rgba(0, 0, 0, 0.06)',
                 display: 'flex',
                 flexDirection: 'column',
               }}
             >
-              <div style={{ padding: '20px 22px 14px', borderBottom: '1px solid #ece4d8' }}>
+              <div style={{ padding: '20px 22px 14px', borderBottom: `1px solid ${themePalette.border}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
-                    <div style={{ fontSize: '22px', fontWeight: 700, color: '#2f2924', marginBottom: '4px' }}>AI 问书</div>
-                    <div style={{ fontSize: '12px', color: '#8a8177', marginBottom: '4px' }}>{currentBook.title}</div>
-                    <div style={{ fontSize: '13px', color: '#5f574f' }}>当前来源：{aiContext.sourceLabel}</div>
+                    <div style={{ fontSize: '22px', fontWeight: 700, color: themePalette.text, marginBottom: '4px' }}>工具</div>
+                    <div style={{ fontSize: '12px', color: themePalette.subText, marginBottom: '4px' }}>{currentBook.title}</div>
+                    <div style={{ fontSize: '13px', color: themePalette.subText }}>当前来源：{aiContext.sourceLabel}</div>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowAIDrawer(false)}
-                    style={{ padding: '6px 10px', border: '1px solid #d7cec0', borderRadius: '999px', background: '#fff', color: '#7d7469' }}
+                    onClick={() => setShowToolsDrawer(false)}
+                    style={{
+                      padding: '6px 10px',
+                      border: `1px solid ${themePalette.border}`,
+                      borderRadius: '999px',
+                      background: themePalette.cardBg,
+                      color: themePalette.subText,
+                    }}
                   >
                     关闭
                   </button>
@@ -858,38 +1157,39 @@ export default function Reader() {
               </div>
 
               <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: 0 }}>
-                <div style={{ background: '#dceeff', border: '1px solid #c9def4', borderRadius: '14px', padding: '14px 16px', color: '#31404d', lineHeight: 1.75, fontSize: '14px', maxHeight: '140px', overflowY: 'auto' }}>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: themePalette.text }}>AI 问书</div>
+                <div style={{ background: themePalette.accentBg, border: `1px solid ${themePalette.accentBorder}`, borderRadius: '14px', padding: '14px 16px', color: themePalette.accentText, lineHeight: 1.75, fontSize: '14px', maxHeight: '140px', overflowY: 'auto' }}>
                   {aiContext.text || '当前没有可用文本上下文。'}
                 </div>
 
                 {!aiConfigured ? (
-                  <div style={{ background: '#fff', border: '1px solid #e8dfd3', borderRadius: '16px', padding: '16px', color: '#5a524a', lineHeight: 1.8 }}>
+                  <div style={{ background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, borderRadius: '16px', padding: '16px', color: themePalette.text, lineHeight: 1.8 }}>
                     <div style={{ fontWeight: 600, marginBottom: '8px' }}>AI 当前未配置</div>
                     <div style={{ marginBottom: '12px' }}>请先在设置页填写 API Key 和 Base URL。设置页只负责配置和状态，保存后这里会立即可用。</div>
                     <button type="button" onClick={() => navigate('/settings')}>去设置</button>
                   </div>
                 ) : (
                   <>
-                    <div data-testid="ai-answer" style={{ background: '#fff', border: '1px solid #e8dfd3', borderRadius: '16px', padding: '18px', flex: 1, minHeight: '360px', display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
-                      <div style={{ fontSize: '13px', color: '#7d7469' }}>回答</div>
+                    <div data-testid="ai-answer" style={{ background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, borderRadius: '16px', padding: '18px', flex: 1, minHeight: '220px', display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
+                      <div style={{ fontSize: '13px', color: themePalette.subText }}>回答</div>
                       {aiLoading ? (
-                        <div style={{ color: '#5c544c', lineHeight: 1.9 }}>思考中...</div>
+                        <div style={{ color: themePalette.text, lineHeight: 1.9 }}>思考中...</div>
                       ) : aiAnswer ? (
                         <>
-                          <div style={{ color: '#39322c', lineHeight: 1.92, fontSize: '15px' }}>{aiAnswer}</div>
+                          <div style={{ color: themePalette.text, lineHeight: 1.92, fontSize: '15px' }}>{aiAnswer}</div>
                           {aiCitations.length > 0 ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                               {aiCitations.map((citation) => (
-                                <div key={citation.chunkId} style={{ borderTop: '1px solid #f0e8dd', paddingTop: '8px' }}>
-                                  <div style={{ fontSize: '12px', color: '#8a8177', marginBottom: '4px' }}>{citation.chapterTitle}</div>
-                                  <div style={{ fontSize: '14px', lineHeight: 1.8, color: '#4b443d' }}>{citation.text}</div>
+                                <div key={citation.chunkId} style={{ borderTop: `1px solid ${themePalette.border}`, paddingTop: '8px' }}>
+                                  <div style={{ fontSize: '12px', color: themePalette.subText, marginBottom: '4px' }}>{citation.chapterTitle}</div>
+                                  <div style={{ fontSize: '14px', lineHeight: 1.8, color: themePalette.text }}>{citation.text}</div>
                                 </div>
                               ))}
                             </div>
                           ) : null}
                         </>
                       ) : (
-                        <div style={{ color: '#7d7469', lineHeight: 1.9 }}>从当前选中文本、当前标注或当前章节发起提问，回答会显示在这里。</div>
+                        <div style={{ color: themePalette.subText, lineHeight: 1.9 }}>从当前选中文本、当前标注或当前章节发起提问，回答会显示在这里。</div>
                       )}
                       {aiError ? <div role="alert" style={{ color: '#cf1322' }}>{aiError}</div> : null}
                     </div>
@@ -900,7 +1200,7 @@ export default function Reader() {
                           key={suggestion}
                           type="button"
                           onClick={() => setAIQuestion(suggestion)}
-                          style={{ padding: '10px 14px', borderRadius: '999px', background: '#fff', border: '1px solid #e6ddd2', color: '#5c544c', fontSize: '13px' }}
+                          style={{ padding: '10px 14px', borderRadius: '999px', background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, color: themePalette.text, fontSize: '13px' }}
                         >
                           {suggestion}
                         </button>
@@ -908,13 +1208,13 @@ export default function Reader() {
                     </div>
 
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-                      <textarea
-                        placeholder="提出问题，获得来自书籍的解答..."
-                        value={aiQuestion}
-                        onChange={(event) => setAIQuestion(event.target.value)}
-                        rows={3}
-                        style={{ flex: 1, resize: 'none', background: '#fff', border: '1px solid #d7cec0', borderRadius: '16px', padding: '14px 16px', color: '#3a332d' }}
-                      />
+                        <textarea
+                          placeholder="提出问题，获得来自书籍的解答..."
+                          value={aiQuestion}
+                          onChange={(event) => setAIQuestion(event.target.value)}
+                          rows={3}
+                          style={{ flex: 1, resize: 'none', background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, borderRadius: '16px', padding: '14px 16px', color: themePalette.text }}
+                        />
                       <button
                         type="button"
                         onClick={() => void handleAskAI()}
@@ -922,21 +1222,38 @@ export default function Reader() {
                         style={{ minWidth: '82px', height: '42px', borderRadius: '999px', border: 'none', background: '#44a6ff', color: '#fff', padding: '0 16px', fontWeight: 600 }}
                       >
                         发送问题
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                </div>
             </aside>
           ) : null}
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderTop: '1px solid #ddd', background: '#f5f5f5' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '10px',
+          padding: '10px 14px',
+          borderTop: `1px solid ${themePalette.border}`,
+          background: themePalette.panelBg,
+          color: themePalette.subText,
+        }}
+      >
         <button onClick={() => setShowSidebar(!showSidebar)}>
           {showSidebar ? '隐藏目录' : '显示目录'}
         </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '13px' }}>
+          <span data-testid="reader-page-label">{footerLabel}</span>
+          <span data-testid="reader-progress">{progressLabel}</span>
+        </div>
       </div>
     </div>
   );
 }
+

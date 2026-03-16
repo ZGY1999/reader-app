@@ -1,0 +1,132 @@
+<h2>阅读页 + 选区工具条 + AI 抽屉</h2>
+<p class="subtitle">目标：平时保持纯阅读，只有选中文本时才出现工具条；点 AI 问书后从右侧滑出面板。</p>
+
+<div class="mockup">
+  <div class="mockup-header">Preview: Reader Layout</div>
+  <div class="mockup-body" style="padding:0; background:#f7f5f2;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid #e8e1d6; background:#fbfaf8;">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div style="padding:8px 12px; border:1px solid #d8d0c4; border-radius:8px; background:#fff;">返回书架</div>
+        <div style="font-size:26px; font-weight:700;">《帝妃娇》</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:220px; padding:8px 12px; border:1px solid #d8d0c4; border-radius:8px; background:#fff; color:#9d958a;">搜索...</div>
+        <div style="padding:8px 14px; border:1px solid #d8d0c4; border-radius:8px; background:#fff;">工具</div>
+        <div style="padding:8px 14px; border:1px solid #d8d0c4; border-radius:8px; background:#fff;">设置</div>
+      </div>
+    </div>
+
+    <div style="display:flex; min-height:620px;">
+      <div style="width:250px; border-right:1px solid #ece5db; background:#fcfbf9; padding:24px 18px;">
+        <div style="font-size:16px; font-weight:700; margin-bottom:18px;">目录</div>
+        <div style="display:flex; flex-direction:column; gap:10px; color:#524a42;">
+          <div>第一章 坏了！</div>
+          <div style="padding:10px 12px; border-radius:10px; background:#e7eefc;">第二章 宇文娘</div>
+          <div>第三章 皇帝</div>
+          <div>第四章 宠妃</div>
+          <div>第五章 合葬</div>
+        </div>
+      </div>
+
+      <div style="flex:1; position:relative; padding:28px 36px 40px; background:#fffdf9;">
+        <div style="max-width:760px; margin:0 auto; color:#342f2b; line-height:1.95; font-size:18px;">
+          <p style="margin-bottom:22px;">
+            已选中：久不舒服。而孟薇玉对自己这位姐姐虽然也并不是那么亲近的，这一点从她的宣女墨玉身上就可以看得出来。
+          </p>
+          <div style="position:absolute; top:82px; left:340px; background:#2f3135; color:#fff; border-radius:12px; padding:10px 12px; box-shadow:0 10px 28px rgba(0,0,0,0.18);">
+            <div style="display:flex; gap:14px; align-items:center; font-size:12px;">
+              <div style="text-align:center;">
+                <div style="margin-bottom:4px;">复制</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="margin-bottom:4px;">马克笔</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="margin-bottom:4px;">波浪线</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="margin-bottom:4px;">直线</div>
+              </div>
+              <div style="text-align:center; color:#ffd48a;">
+                <div style="margin-bottom:4px;">AI问书</div>
+              </div>
+            </div>
+          </div>
+          <p style="background:#d8ecff; display:inline; box-shadow:0 0 0 6px #d8ecff;">
+            久不舒服。而孟薇玉对自己这位姐姐虽然也并不是那么亲近的，这一点从她的宣女墨玉身上就可以看得出来。
+          </p>
+          <p style="margin-top:28px;">
+            因为此时眼在她身边的人实在太多，不仅这些护卫宫人是眼线，就是后宫那些娘娘各自安插在此的，也未必没有。
+          </p>
+          <p>
+            这样处理之后，阅读页常态下只保留正文、目录、搜索、设置，不再被 AI 和 TTS 占据上方空间。
+          </p>
+        </div>
+
+        <div style="position:absolute; right:0; top:0; width:410px; height:100%; border-left:1px solid #e7e0d7; background:rgba(250,248,244,0.98); box-shadow:-18px 0 32px rgba(0,0,0,0.08); display:flex; flex-direction:column;">
+          <div style="padding:20px 22px 14px; border-bottom:1px solid #ece5db;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div class="label">AI Drawer</div>
+                <div style="font-size:22px; font-weight:700;">AI 问书</div>
+              </div>
+              <div style="padding:6px 10px; border:1px solid #d8d0c4; border-radius:999px; background:#fff;">关闭</div>
+            </div>
+            <div style="margin-top:12px; font-size:13px; color:#7b7268;">当前来源：选中文本</div>
+          </div>
+
+          <div style="padding:18px 22px; display:flex; flex-direction:column; gap:14px; flex:1;">
+            <div style="background:#eef5ff; border:1px solid #d7e7ff; border-radius:14px; padding:14px 16px;">
+              <div style="font-size:12px; color:#6c7380; margin-bottom:6px;">已带入选中文本</div>
+              <div style="font-size:14px; line-height:1.7; color:#2d3440;">
+                “久不舒服。而孟薇玉对自己这位姐姐虽然也并不是那么亲近的……”
+              </div>
+            </div>
+
+            <div style="background:#fff; border:1px solid #ece5db; border-radius:14px; padding:16px;">
+              <div style="font-size:13px; color:#7b7268; margin-bottom:8px;">你可以直接问</div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <div style="padding:8px 12px; border-radius:999px; background:#f5f2ed; font-size:13px;">这段是什么意思？</div>
+                <div style="padding:8px 12px; border-radius:999px; background:#f5f2ed; font-size:13px;">这段的情绪是什么？</div>
+                <div style="padding:8px 12px; border-radius:999px; background:#f5f2ed; font-size:13px;">和前文怎么关联？</div>
+              </div>
+            </div>
+
+            <div style="background:#fff; border:1px solid #ece5db; border-radius:14px; padding:16px; flex:1;">
+              <div style="font-size:13px; color:#7b7268; margin-bottom:10px;">回答区域</div>
+              <div style="font-size:15px; line-height:1.9; color:#312b26;">
+                AI 在这里回答问题，并展示引用来源。阅读正文仍然保留在左边，不会被整页切走。
+              </div>
+            </div>
+
+            <div style="display:flex; gap:10px; align-items:flex-end;">
+              <div style="flex:1; background:#fff; border:1px solid #d8d0c4; border-radius:14px; padding:14px; color:#9d958a;">
+                提出问题，获得来自书籍的解释...
+              </div>
+              <div style="width:44px; height:44px; border-radius:50%; background:#4aa8ff;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="options">
+    <div class="option" data-choice="confirm" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>按这个方向实现</h3>
+        <p>阅读页常态纯净，AI 只在选区触发后以右侧抽屉出现。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="adjust" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>需要调整布局</h3>
+        <p>如果你想让抽屉更窄、更宽，或者工具条按钮顺序不同，可以继续改草图。</p>
+      </div>
+    </div>
+  </div>
+</div>

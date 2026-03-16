@@ -1,3 +1,4 @@
+import { webcrypto } from 'crypto';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
 export interface TTSOptions {
@@ -10,6 +11,12 @@ export class TTSService {
   private tts: MsEdgeTTS;
 
   constructor() {
+    if (!globalThis.crypto) {
+      Object.defineProperty(globalThis, 'crypto', {
+        value: webcrypto,
+        configurable: true,
+      });
+    }
     this.tts = new MsEdgeTTS();
   }
 

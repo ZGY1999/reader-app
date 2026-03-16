@@ -19,6 +19,7 @@ describe('Preload', () => {
       'electronAPI',
       expect.objectContaining({
         importBook: expect.any(Function),
+        deleteBook: expect.any(Function),
         getBooks: expect.any(Function),
         getBook: expect.any(Function),
         getBookContent: expect.any(Function),
@@ -32,6 +33,9 @@ describe('Preload', () => {
         ai: expect.objectContaining({
           getStatus: expect.any(Function),
           ask: expect.any(Function),
+        }),
+        runtime: expect.objectContaining({
+          getPdfJsConfig: expect.any(Function),
         }),
         tts: expect.objectContaining({
           synthesize: expect.any(Function),
@@ -54,11 +58,13 @@ describe('Preload', () => {
     expect(Object.keys(exposedAPI).sort()).toEqual([
       'ai',
       'annotations',
+      'deleteBook',
       'getBook',
       'getBookContent',
       'getBooks',
       'getProgress',
       'importBook',
+      'runtime',
       'saveProgress',
       'settings',
       'tts',

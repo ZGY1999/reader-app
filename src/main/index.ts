@@ -7,6 +7,7 @@ import { SettingsHandler } from './ipc/settings.handler';
 import { AIHandler } from './ipc/ai.handler';
 import { TTSService } from '../services/tts/tts.service';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 
 const windowManager = new WindowManager();
 const dbPath = path.join(app.getPath('userData'), 'reader.db');
@@ -29,6 +30,7 @@ app.whenReady().then(async () => {
 
   // 书籍管理
   ipcMain.handle('import-book', async (_, filePath: string) => bookHandler.importBook(filePath));
+  ipcMain.handle('delete-book', async (_, id: string) => bookHandler.deleteBook(id));
   ipcMain.handle('get-books', async () => bookHandler.getBooks());
   ipcMain.handle('get-book', async (_, id: string) => bookHandler.getBook(id));
   ipcMain.handle('get-book-content', async (_, id: string) => bookHandler.getBookContent(id));
@@ -42,6 +44,16 @@ app.whenReady().then(async () => {
   ipcMain.handle('settings:save', async (_, key: string, value: string) => settingsHandler.saveSetting(key, value));
   ipcMain.handle('settings:get', async (_, key: string) => settingsHandler.getSetting(key));
   ipcMain.handle('settings:getAll', async () => settingsHandler.getAllSettings());
+  ipcMain.handle('runtime:getPdfJsConfig', async () => {
+    const appPath = app.getAppPath();
+    const modulePath = path.join(appPath, 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.mjs');
+    const workerPath = path.join(appPath, 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs');
+
+    return {
+      moduleUrl: pathToFileURL(modulePath).href,
+      workerUrl: pathToFileURL(workerPath).href,
+    };
+  });
 
   ipcMain.handle('ai:getStatus', async () => aiHandler.getStatus());
   ipcMain.handle('ai:ask', async (_, options) => aiHandler.ask(options));

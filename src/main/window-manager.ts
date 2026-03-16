@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+﻿import { BrowserWindow } from 'electron';
 import * as path from 'path';
 
 export class WindowManager {
@@ -15,12 +15,12 @@ export class WindowManager {
       },
     });
 
-    // 开发模式：加载Vite dev server
+    // 寮€鍙戞ā寮忥細鍔犺浇Vite dev server
     if (process.env.NODE_ENV === 'development') {
       this.mainWindow.loadURL('http://localhost:5174');
     } else {
-      // 生产模式：加载构建后的文件
-      this.mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+      // 鐢熶骇妯″紡锛氬姞杞芥瀯寤哄悗鐨勬枃浠?
+      this.mainWindow.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
     }
 
     return this.mainWindow;

@@ -46,4 +46,57 @@ describe('TextRenderer', () => {
     expect(screen.getByTestId('annotation-1').className).toContain('annotation-mark');
     expect(screen.getByTestId('annotation-1').className).toContain('annotation-active');
   });
+
+  it('computes selection offsets against the full rendered content when annotations already split the DOM', () => {
+    const annotations: Annotation[] = [
+      { id: '1', bookId: 'book-1', startOffset: 0, endOffset: 5, text: 'Alpha', style: 'highlight' },
+    ];
+    const onAnnotate = vi.fn();
+
+    render(
+      <TextRenderer
+        content="Alpha Beta Gamma"
+        annotations={annotations}
+        onAnnotate={onAnnotate}
+      />
+    );
+
+    const renderer = screen.getByText('Alpha').parentElement as HTMLDivElement;
+    const trailingTextNode = renderer.childNodes[1] as Text;
+    const fakePrefixRange = {
+      selectNodeContents: vi.fn(),
+      setEnd: vi.fn(),
+      toString: () => 'Alpha ',
+    };
+    const fakeRange = {
+      startContainer: trailingTextNode,
+      startOffset: 0,
+      endContainer: trailingTextNode,
+      endOffset: 4,
+      cloneRange: vi.fn(() => fakePrefixRange),
+      getBoundingClientRect: () => ({
+        top: 10,
+        left: 20,
+        width: 40,
+        height: 12,
+        right: 60,
+        bottom: 22,
+      }),
+    };
+
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      isCollapsed: false,
+      rangeCount: 1,
+      toString: () => 'Beta',
+      getRangeAt: () => fakeRange,
+    } as unknown as Selection);
+
+    fireEvent.mouseUp(renderer);
+
+    expect(onAnnotate).toHaveBeenCalledWith(expect.objectContaining({
+      startOffset: 6,
+      endOffset: 10,
+      text: 'Beta',
+    }));
+  });
 });

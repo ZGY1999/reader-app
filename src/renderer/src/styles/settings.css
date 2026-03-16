@@ -1,38 +1,222 @@
 :root {
   --font-size: 16px;
   --line-height: 1.8;
-  --font-family: system-ui, -apple-system, sans-serif;
-  --bg-color: #ffffff;
-  --text-color: #333333;
+  --font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --bg-color: #f4efe6;
+  --text-color: #2f2924;
 }
 
 [data-theme="dark"] {
-  --bg-color: #1a1a1a;
-  --text-color: #e0e0e0;
+  --bg-color: #1f1a17;
+  --text-color: #efe6d9;
 }
 
 body {
-  font-size: var(--font-size);
-  line-height: var(--line-height);
   font-family: var(--font-family);
-  background-color: var(--bg-color);
-  color: var(--text-color);
+  margin: 0;
+  background-color: #efe7da;
+  color: #2f2924;
+}
+
+.settings-shell {
+  min-height: 100vh;
+  padding: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(224, 203, 174, 0.22), transparent 28%),
+    linear-gradient(180deg, #f6f1e8 0%, #efe7da 100%);
 }
 
 .settings-page {
-  padding: 20px;
-  max-width: 600px;
+  max-width: 1080px;
+  margin: 0 auto;
+  color: #2f2924;
 }
 
-.settings-page section {
-  margin: 20px 0;
+.settings-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  padding: 26px 28px;
+  margin-bottom: 20px;
+  border-radius: 28px;
+  background: rgba(255, 251, 245, 0.88);
+  border: 1px solid rgba(200, 185, 166, 0.55);
+  box-shadow: 0 18px 45px rgba(95, 75, 53, 0.08);
 }
 
-.settings-page label {
-  display: block;
-  margin: 10px 0;
+.settings-hero__copy h2 {
+  margin: 8px 0 10px;
+  font-size: 34px;
+  line-height: 1.15;
 }
 
-.settings-page input[type="range"] {
+.settings-hero__copy p {
+  margin: 0;
+  max-width: 620px;
+  color: #6c6258;
+}
+
+.settings-eyebrow,
+.settings-card__eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9a7a56;
+}
+
+.settings-back-button {
+  border: 1px solid #d6c6b4;
+  background: #fffaf4;
+  color: #493d32;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-back-button:hover {
+  background: #fff3e3;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.settings-card {
+  padding: 24px;
+  border-radius: 24px;
+  background: rgba(255, 251, 245, 0.92);
+  border: 1px solid rgba(214, 198, 180, 0.7);
+  box-shadow: 0 18px 40px rgba(95, 75, 53, 0.06);
+}
+
+.settings-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.settings-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-card__header h3 {
+  margin: 8px 0 0;
+  font-size: 24px;
+}
+
+.settings-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-badge--neutral {
+  background: #ede5da;
+  color: #65584a;
+}
+
+.settings-badge--ready {
+  background: #dff2e6;
+  color: #1f6b46;
+}
+
+.settings-badge--pending {
+  background: #f8ead9;
+  color: #9c5b21;
+}
+
+.settings-summary {
+  margin: 0 0 10px;
+  color: #3d352f;
+}
+
+.settings-note {
+  margin: 0 0 18px;
+  color: #6f665d;
+  font-size: 14px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.settings-field label,
+.settings-theme-group__label {
+  font-weight: 600;
+  color: #413830;
+}
+
+.settings-input {
   width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #d8cab7;
+  background: #fffdf9;
+  color: #2f2924;
+  font: inherit;
+}
+
+.settings-input:focus {
+  outline: 2px solid rgba(95, 156, 255, 0.24);
+  border-color: #8cb8ff;
+}
+
+.settings-slider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-slider-row input[type="range"] {
+  width: 100%;
+}
+
+.settings-theme-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.settings-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid #d8cab7;
+  background: #fffdf9;
+}
+
+.settings-reset-button {
+  border: 1px solid #e2d4c2;
+  background: #f6efe5;
+  color: #5c4e41;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-reset-button:hover {
+  background: #efe4d5;
 }

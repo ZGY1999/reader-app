@@ -10,6 +10,9 @@ export interface Chapter {
   id: string;
   title: string;
   content: string;
+  markup?: string;
+  pageNumber?: number;
+  tocTitle?: string;
 }
 
 export interface Annotation {
@@ -25,4 +28,5 @@ export interface ReadingPayload {
   book: Book;
   content: string;
   chapters: Chapter[];
+  pdfData?: Uint8Array;
 }

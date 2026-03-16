@@ -2,6 +2,9 @@ export interface ParsedChapter {
   id: string;
   title: string;
   content: string;
+  markup?: string;
+  pageNumber?: number;
+  tocTitle?: string;
 }
 
 export interface ParsedBook {

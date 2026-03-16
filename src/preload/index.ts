@@ -2,11 +2,15 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   importBook: (filePath: string) => ipcRenderer.invoke('import-book', filePath),
+  deleteBook: (id: string) => ipcRenderer.invoke('delete-book', id),
   getBooks: () => ipcRenderer.invoke('get-books'),
   getBook: (id: string) => ipcRenderer.invoke('get-book', id),
   getBookContent: (id: string) => ipcRenderer.invoke('get-book-content', id),
   saveProgress: (data: any) => ipcRenderer.invoke('save-progress', data),
   getProgress: (bookId: string) => ipcRenderer.invoke('get-progress', bookId),
+  runtime: {
+    getPdfJsConfig: () => ipcRenderer.invoke('runtime:getPdfJsConfig'),
+  },
   annotations: {
     create: (data: any) => ipcRenderer.invoke('annotations:create', data),
     list: (bookId: string) => ipcRenderer.invoke('annotations:list', bookId),

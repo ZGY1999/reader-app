@@ -1,3 +1,4 @@
+import * as fs from 'fs/promises';
 import { Database } from '../../database/sqlite';
 import { BookRepository } from '../../database/repositories/book.repository';
 import { ProgressRepository } from '../../database/repositories/progress.repository';
@@ -46,11 +47,18 @@ export class BookHandler {
     return this.bookRepo.findById(id);
   }
 
+  async deleteBook(id: string) {
+    this.bookRepo.delete(id);
+    return { success: true };
+  }
+
   async getBookContent(id: string) {
     const book = this.bookRepo.findById(id);
     if (!book) throw new Error('Book not found');
 
     const parsed = await this.parseByFormat(book.format, book.filePath);
+    const pdfData = book.format === 'pdf' ? new Uint8Array(await fs.readFile(book.filePath)) : undefined;
+
     return {
       book: {
         id: book.id,
@@ -61,6 +69,7 @@ export class BookHandler {
       },
       content: parsed.content,
       chapters: parsed.chapters,
+      pdfData,
     };
   }
 

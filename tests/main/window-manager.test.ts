@@ -1,5 +1,6 @@
 ﻿import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BrowserWindow } from 'electron';
+import * as path from 'path';
 
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
@@ -64,5 +65,22 @@ describe('WindowManager', () => {
 
     expect(mockWindow.loadURL).toHaveBeenCalledWith('http://localhost:5174');
     expect(mockWindow.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('loads the compiled renderer html from dist/renderer in production mode', async () => {
+    const { WindowManager } = await import('../../src/main/window-manager');
+    const manager = new WindowManager();
+
+    const mockWindow = {
+      loadFile: vi.fn(),
+      loadURL: vi.fn(),
+      on: vi.fn(),
+    };
+    (BrowserWindow as any).mockImplementation(() => mockWindow);
+
+    manager.createWindow();
+
+    expect(mockWindow.loadFile).toHaveBeenCalledWith(expect.stringContaining(path.join('dist', 'renderer', 'index.html')));
+    expect(mockWindow.loadURL).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ describe('Bookshelf', () => {
     window.electronAPI = {
       importBook: vi.fn(),
       getBooks: vi.fn().mockResolvedValue([]),
+      deleteBook: vi.fn().mockResolvedValue({ success: true }),
       getBook: vi.fn(),
       getBookContent: vi.fn(),
       saveProgress: vi.fn(),
@@ -123,5 +124,31 @@ describe('Bookshelf', () => {
     expect(await screen.findByText('Unsupported book format')).toBeDefined();
 
     createElementSpy.mockRestore();
+  });
+
+  it('allows deleting a book directly from the bookshelf', async () => {
+    vi.mocked(window.electronAPI.getBooks).mockResolvedValue([
+      {
+        id: 'book-1',
+        title: '测试书籍',
+        format: 'txt',
+        filePath: '/test.txt',
+      },
+    ]);
+
+    render(
+      <BrowserRouter>
+        <Bookshelf />
+      </BrowserRouter>
+    );
+
+    expect(await screen.findByText('测试书籍')).toBeDefined();
+    act(() => {
+      screen.getByRole('button', { name: '删除 测试书籍' }).click();
+    });
+
+    await waitFor(() => {
+      expect(window.electronAPI.deleteBook).toHaveBeenCalledWith('book-1');
+    });
   });
 });

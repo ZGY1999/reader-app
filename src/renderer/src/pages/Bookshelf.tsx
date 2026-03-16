@@ -4,7 +4,7 @@ import { api } from '../api';
 import { useBookStore } from '../store';
 
 export default function Bookshelf() {
-  const { books, setBooks, setCurrentBook } = useBookStore();
+  const { books, setBooks, setCurrentBook, currentBook } = useBookStore();
   const navigate = useNavigate();
   const [error, setError] = useState('');
 
@@ -50,6 +50,26 @@ export default function Bookshelf() {
     navigate('/reader');
   };
 
+  const handleDelete = async (bookId: string) => {
+    setError('');
+
+    try {
+      const result = await api.deleteBook(bookId);
+      if (!result.success) {
+        setError('Failed to delete book');
+        return;
+      }
+
+      if (currentBook?.id === bookId) {
+        useBookStore.setState({ currentBook: null, reading: null });
+      }
+
+      await loadBooks();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete book');
+    }
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <h1>书架</h1>
@@ -60,9 +80,19 @@ export default function Bookshelf() {
       ) : (
         <div>
           {books.map((book) => (
-            <div key={book.id} onClick={() => handleOpen(book)} style={{ cursor: 'pointer', padding: '10px', border: '1px solid #ccc', margin: '10px 0' }}>
+            <div key={book.id} style={{ padding: '10px', border: '1px solid #ccc', margin: '10px 0' }}>
               <h3>{book.title}</h3>
               {book.author && <p>作者：{book.author}</p>}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" onClick={() => handleOpen(book)}>打开</button>
+                <button
+                  type="button"
+                  aria-label={`删除 ${book.title}`}
+                  onClick={() => void handleDelete(book.id)}
+                >
+                  删除
+                </button>
+              </div>
             </div>
           ))}
         </div>

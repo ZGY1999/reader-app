@@ -42,4 +42,9 @@ export class BookRepository {
       filePath: row.file_path
     }));
   }
+
+  delete(id: string): void {
+    this.db.query('DELETE FROM books WHERE id = ?', [id]);
+    this.db.save();
+  }
 }

@@ -1,10 +1,17 @@
 export interface ElectronAPI {
   importBook: (filePath: string) => Promise<any>;
+  deleteBook: (id: string) => Promise<{ success: boolean }>;
   getBooks: () => Promise<any[]>;
   getBook: (id: string) => Promise<any>;
   getBookContent: (id: string) => Promise<any>;
   saveProgress: (data: any) => Promise<any>;
   getProgress: (bookId: string) => Promise<any>;
+  runtime: {
+    getPdfJsConfig: () => Promise<{
+      moduleUrl: string;
+      workerUrl: string;
+    }>;
+  };
 
   annotations: {
     create: (data: {
