@@ -22,6 +22,9 @@
   width: fit-content;
   max-width: 100%;
   margin: 0 auto;
+  --scale-factor: 1;
+  --user-unit: 1;
+  --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
 }
 
 .pdf-page-canvas {
@@ -49,13 +52,17 @@
 
 .pdf-annotation-overlay {
   position: absolute;
-  pointer-events: auto;
-  cursor: pointer;
-  border-radius: 4px;
+  pointer-events: none;
+  cursor: default;
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+  transition:
+    opacity 90ms ease,
+    background-color 120ms ease;
 }
 
 .pdf-annotation-overlay.annotation-highlight {
-  background: rgba(255, 245, 102, 0.62);
+  background: rgba(255, 235, 59, 0.65);
 }
 
 .pdf-annotation-overlay.annotation-underline {
@@ -73,13 +80,19 @@
 }
 
 .pdf-tts-overlay {
-  background: rgba(24, 144, 255, 0.18);
+  background: rgba(100, 181, 246, 0.45);
   pointer-events: none;
   cursor: default;
 }
 
+.pdf-selection-preview-overlay {
+  background: rgba(255, 235, 59, 0.55);
+  border-radius: 2px;
+  transition: none;
+}
+
 .pdf-selection-overlay {
-  background: rgba(59, 130, 246, 0.24);
+  background: rgba(255, 235, 59, 0.65);
   pointer-events: none;
   cursor: default;
 }
@@ -99,12 +112,40 @@
   caret-color: CanvasText;
 }
 
+.pdf-text-layer {
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
 .pdf-text-layer :is(span, br) {
   position: absolute;
   color: transparent;
   white-space: pre;
   cursor: text;
   transform-origin: 0 0;
+}
+
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform:
+    rotate(var(--rotate))
+    scaleX(var(--scale-x))
+    scale(var(--min-font-size-inv));
+}
+
+.pdf-text-layer .markedContent {
+  display: contents;
+}
+
+.pdf-text-layer span[role="img"] {
+  user-select: none;
+  cursor: default;
 }
 
 .pdf-text-layer .annotation-mark,

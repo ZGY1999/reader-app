@@ -3,6 +3,7 @@ type PdfJsModule = typeof import('pdfjs-dist/legacy/build/pdf.mjs');
 interface PdfJsRuntimeConfig {
   moduleUrl: string;
   workerUrl: string;
+  standardFontDataUrl: string;
 }
 
 let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
@@ -14,6 +15,16 @@ const getPdfJsRuntimeConfig = async (): Promise<PdfJsRuntimeConfig> => {
   }
 
   return pdfJsRuntimeConfigPromise;
+};
+
+export const getResolvedPdfJsRuntimeConfig = async (): Promise<PdfJsRuntimeConfig> => {
+  const runtimeConfig = await getPdfJsRuntimeConfig();
+
+  return {
+    moduleUrl: resolvePdfJsAssetUrl(runtimeConfig.moduleUrl),
+    workerUrl: resolvePdfJsAssetUrl(runtimeConfig.workerUrl),
+    standardFontDataUrl: resolvePdfJsAssetUrl(runtimeConfig.standardFontDataUrl),
+  };
 };
 
 export const resolvePdfJsAssetUrl = (
@@ -31,9 +42,9 @@ export const resolvePdfJsAssetUrl = (
 };
 
 export const loadPdfJs = async (): Promise<PdfJsModule> => {
-  const runtimeConfig = await getPdfJsRuntimeConfig();
-  const moduleUrl = resolvePdfJsAssetUrl(runtimeConfig.moduleUrl);
-  const workerUrl = resolvePdfJsAssetUrl(runtimeConfig.workerUrl);
+  const runtimeConfig = await getResolvedPdfJsRuntimeConfig();
+  const moduleUrl = runtimeConfig.moduleUrl;
+  const workerUrl = runtimeConfig.workerUrl;
 
   if (!pdfJsModulePromise) {
     pdfJsModulePromise = import(/* @vite-ignore */ moduleUrl) as Promise<PdfJsModule>;

@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   loadPdfJsMock,
+  getResolvedPdfJsRuntimeConfigMock,
   renderMock,
   getPageMock,
   getDocumentMock,
   textLayerRenderMock,
 } = vi.hoisted(() => ({
   loadPdfJsMock: vi.fn(),
+  getResolvedPdfJsRuntimeConfigMock: vi.fn(),
   renderMock: vi.fn(),
   getPageMock: vi.fn(),
   getDocumentMock: vi.fn(),
@@ -17,6 +19,7 @@ const {
 
 vi.mock('../utils/pdfjs-runtime', () => ({
   loadPdfJs: () => loadPdfJsMock(),
+  getResolvedPdfJsRuntimeConfig: () => getResolvedPdfJsRuntimeConfigMock(),
 }));
 
 const pdfJsModule = {
@@ -50,9 +53,16 @@ const pdfJsModule = {
         items = this.textContentSource.items;
       }
 
-      const textNode = document.createElement('span');
-      textNode.textContent = items.map((item) => item.str).join(' ');
-      this.container.appendChild(textNode);
+      items.forEach((item) => {
+        const textNode = document.createElement('span');
+        textNode.textContent = item.str;
+        textNode.style.left = '10%';
+        textNode.style.top = '20%';
+        textNode.style.fontFamily = 'sans-serif';
+        textNode.style.setProperty('--font-height', '20px');
+        textNode.style.setProperty('--scale-x', '1.25');
+        this.container.appendChild(textNode);
+      });
       textLayerRenderMock();
     }
   },
@@ -84,6 +94,7 @@ describe('PdfDocumentView', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     loadPdfJsMock.mockReset();
+    getResolvedPdfJsRuntimeConfigMock.mockReset();
     renderMock.mockReset();
     getPageMock.mockReset();
     getDocumentMock.mockReset();
@@ -118,6 +129,11 @@ describe('PdfDocumentView', () => {
       promise: Promise.resolve({
         getPage: getPageMock,
       }),
+    });
+    getResolvedPdfJsRuntimeConfigMock.mockResolvedValue({
+      moduleUrl: 'file:///pdf.mjs',
+      workerUrl: 'file:///pdf.worker.min.mjs',
+      standardFontDataUrl: 'file:///standard_fonts/',
     });
     loadPdfJsMock.mockResolvedValue(pdfJsModule);
 
@@ -163,6 +179,21 @@ describe('PdfDocumentView', () => {
     expect(firstCall.data).not.toBe(documentData);
   });
 
+  it('passes standard font assets through to pdf.js document loading', async () => {
+    render(<PdfDocumentView pages={pages} documentData={new Uint8Array([7, 8, 9])} />);
+
+    await waitFor(() => {
+      expect(getDocumentMock).toHaveBeenCalled();
+    });
+
+    const firstCall = getDocumentMock.mock.calls[0]?.[0] as {
+      data: Uint8Array;
+      standardFontDataUrl?: string;
+    };
+
+    expect(firstCall.standardFontDataUrl).toBe('file:///standard_fonts/');
+  });
+
   it('renders page placeholders while waiting for pdf bytes', async () => {
     render(<PdfDocumentView pages={pages} />);
 
@@ -179,6 +210,18 @@ describe('PdfDocumentView', () => {
     });
 
     expect(screen.getByText('Page 1 text')).toBeDefined();
+  });
+
+  it('sets the pdf.js scale variables on the text-layer container', async () => {
+    render(<PdfDocumentView pages={pages} documentData={new Uint8Array([1, 2, 3])} />);
+
+    const span = await screen.findByText('Page 1 text');
+    const textLayer = span.parentElement as HTMLElement;
+
+    expect(textLayer.className).toContain('pdf-text-layer');
+    expect(textLayer.style.getPropertyValue('--scale-factor')).not.toBe('');
+    expect(textLayer.style.getPropertyValue('--total-scale-factor')).not.toBe('');
+    expect(textLayer.style.getPropertyValue('--user-unit')).toBe('1');
   });
 
   it('loads the pdf document once and reuses it on rerender', async () => {
@@ -215,6 +258,7 @@ describe('PdfDocumentView', () => {
   it('clears native selection after capturing a pdf text selection', async () => {
     const onAnnotate = vi.fn();
     const removeAllRanges = vi.fn();
+    let cloneCall = 0;
 
     render(<PdfDocumentView pages={pages} documentData={new Uint8Array([1, 2, 3])} onAnnotate={onAnnotate} />);
 
@@ -235,7 +279,10 @@ describe('PdfDocumentView', () => {
         cloneRange: () => ({
           selectNodeContents: vi.fn(),
           setEnd: vi.fn(),
-          toString: () => '',
+          toString: () => {
+            cloneCall += 1;
+            return cloneCall === 1 ? '' : 'Page';
+          },
         }),
         getBoundingClientRect: () => ({
           top: 100,
@@ -256,6 +303,187 @@ describe('PdfDocumentView', () => {
       text: 'Page',
     }));
     expect(removeAllRanges).toHaveBeenCalled();
+  });
+
+  it('captures selection offsets correctly when the selection starts at the beginning of a later text node', async () => {
+    const onAnnotate = vi.fn();
+    let cloneCall = 0;
+
+    getPageMock.mockImplementation(async () => ({
+      getViewport: ({ scale }: { scale: number }) => ({
+        width: 600 * scale,
+        height: 800 * scale,
+        scale,
+      }),
+      streamTextContent: () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              items: [{ str: 'Page' }, { str: ' ' }, { str: 'one' }, { str: ' ' }, { str: 'text' }],
+              styles: {},
+              lang: 'en',
+            });
+            controller.close();
+          },
+        }),
+      getTextContent: async () => ({
+        items: [{ str: 'Page' }, { str: ' ' }, { str: 'one' }, { str: ' ' }, { str: 'text' }],
+      }),
+      render: () => ({
+        promise: Promise.resolve(renderMock(1)),
+      }),
+    }));
+
+    render(<PdfDocumentView pages={[pages[0]]} documentData={new Uint8Array([1, 2, 3])} onAnnotate={onAnnotate} />);
+
+    await screen.findByText('one');
+
+    const secondWordNode = screen.getByText('one').firstChild as Text;
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      isCollapsed: false,
+      rangeCount: 1,
+      toString: () => 'one',
+      removeAllRanges: vi.fn(),
+      getRangeAt: () => ({
+        startContainer: secondWordNode,
+        startOffset: 0,
+        endContainer: secondWordNode,
+        endOffset: 3,
+        commonAncestorContainer: secondWordNode,
+        cloneRange: () => ({
+          selectNodeContents: vi.fn(),
+          setEnd: vi.fn(),
+          toString: () => {
+            cloneCall += 1;
+            return cloneCall === 1 ? 'Page ' : 'Page one';
+          },
+        }),
+        getBoundingClientRect: () => ({
+          top: 120,
+          left: 160,
+          width: 70,
+          height: 24,
+          right: 230,
+          bottom: 144,
+        }),
+      }),
+    } as unknown as Selection);
+
+    fireEvent.mouseUp(screen.getByText('one'));
+
+    expect(onAnnotate).toHaveBeenCalledWith(expect.objectContaining({
+      startOffset: 5,
+      endOffset: 8,
+      text: 'one',
+    }));
+  });
+
+  it('does not stretch annotation overlays to the full page width when pdf text spans occupy a narrower column', async () => {
+    vi.spyOn(document, 'createRange').mockImplementation(() => ({
+      setStart: vi.fn(),
+      setEnd: vi.fn(),
+      getClientRects: () => ([
+        {
+          left: 120,
+          top: 180,
+          width: 120,
+          height: 24,
+          right: 240,
+          bottom: 204,
+          x: 120,
+          y: 180,
+          toJSON: () => ({}),
+        } as DOMRect,
+      ] as unknown as DOMRectList),
+      getBoundingClientRect: () => ({
+        left: 120,
+        top: 180,
+        width: 120,
+        height: 24,
+        right: 240,
+        bottom: 204,
+        x: 120,
+        y: 180,
+        toJSON: () => ({}),
+      } as DOMRect),
+    }) as unknown as Range);
+
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function mockRect(this: HTMLElement) {
+      if (this.classList.contains('pdf-page-viewport')) {
+        return {
+          left: 0,
+          top: 0,
+          width: 500,
+          height: 800,
+          right: 500,
+          bottom: 800,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+
+      if (this.classList.contains('pdf-text-layer')) {
+        return {
+          left: 80,
+          top: 0,
+          width: 500,
+          height: 800,
+          right: 580,
+          bottom: 800,
+          x: 80,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+
+      if (this.tagName === 'SPAN' && this.textContent === 'Page 1 text') {
+        return {
+          left: 80,
+          top: 180,
+          width: 180,
+          height: 24,
+          right: 260,
+          bottom: 204,
+          x: 80,
+          y: 180,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+
+      return {
+        left: 0,
+        top: 0,
+        width: 0,
+        height: 0,
+        right: 0,
+        bottom: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect;
+    });
+
+    render(
+      <PdfDocumentView
+        pages={[{
+          ...pages[0],
+          annotations: [{
+            id: 'ann-1',
+            bookId: 'book-1',
+            startOffset: 0,
+            endOffset: 4,
+            text: 'Page',
+            style: 'highlight',
+          }],
+        }]}
+        documentData={new Uint8Array([1, 2, 3])}
+      />
+    );
+
+    const overlay = await screen.findByTestId('annotation-ann-1');
+    expect((overlay as HTMLElement).style.left).toBe('118px');
+    expect((overlay as HTMLElement).style.width).toBe('126px');
   });
 
   it('selects an existing pdf annotation when the overlay is clicked', async () => {

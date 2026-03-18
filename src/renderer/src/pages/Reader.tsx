@@ -13,6 +13,14 @@ interface PendingSelection {
   endOffset: number;
   text: string;
   rect: DOMRect;
+  rects?: Array<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    right: number;
+    bottom: number;
+  }>;
 }
 
 interface TTSState {
@@ -100,6 +108,8 @@ export default function Reader() {
   const chapterSectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const selectionToolbarRef = useRef<HTMLDivElement | null>(null);
+  const progressSaveTimerRef = useRef<number | null>(null);
+  const pendingProgressRef = useRef<{ bookId: string; chapterId: string | null; offset: number; progress: number } | null>(null);
 
   const chapterRanges = useMemo(() => {
     let searchFrom = 0;
@@ -380,6 +390,14 @@ export default function Reader() {
     return () => {
       window.speechSynthesis?.cancel?.();
       utteranceRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (progressSaveTimerRef.current !== null) {
+        window.clearTimeout(progressSaveTimerRef.current);
+      }
     };
   }, []);
 
@@ -748,15 +766,29 @@ export default function Reader() {
     const maxOffset = Math.max(scrollContainer.scrollHeight - scrollContainer.clientHeight, 0);
     const offset = scrollContainer.scrollTop;
     const progress = maxOffset === 0 ? 0 : offset / maxOffset;
-    const chapterId = syncCurrentChapter(offset) ?? chapterRanges[0]?.id;
+    const chapterId = syncCurrentChapter(offset) ?? chapterRanges[0]?.id ?? null;
     updateFooterMetrics(scrollContainer);
 
-    void api.saveProgress({
+    pendingProgressRef.current = {
       bookId: currentBook.id,
       chapterId,
       offset,
       progress,
-    });
+    };
+
+    if (progressSaveTimerRef.current !== null) {
+      return;
+    }
+
+    progressSaveTimerRef.current = window.setTimeout(() => {
+      progressSaveTimerRef.current = null;
+      const nextPayload = pendingProgressRef.current;
+      pendingProgressRef.current = null;
+
+      if (nextPayload) {
+        void api.saveProgress(nextPayload);
+      }
+    }, 180);
   };
 
   const handleChapterJump = (chapterId: string) => {
@@ -832,6 +864,36 @@ export default function Reader() {
       endOffset: Math.min(pendingSelection.endOffset - chapter.startOffset, chapter.content.length),
     };
   };
+
+  const getChapterPendingSelectionRects = (chapterId: string) => {
+    if (!pendingSelection?.rects?.length) return null;
+
+    const chapter = chapterRanges.find((item) => item.id === chapterId);
+    if (!chapter) return null;
+    if (pendingSelection.endOffset <= chapter.startOffset || pendingSelection.startOffset >= chapter.endOffset) {
+      return null;
+    }
+
+    return pendingSelection.rects;
+  };
+
+  const pdfPages = useMemo(() => {
+    if (!isPdfBook) {
+      return [];
+    }
+
+    return chapterRanges.map((chapter, index) => ({
+      id: chapter.id,
+      title: chapter.title,
+      pageNumber: index + 1,
+      startOffset: chapter.startOffset,
+      content: chapter.content,
+      annotations: getChapterAnnotations(chapter.id),
+      pendingSelectionRange: getChapterPendingSelection(chapter.id),
+      pendingSelectionRects: getChapterPendingSelectionRects(chapter.id),
+      highlightRange: getChapterTTSHighlight(chapter.id),
+    }));
+  }, [chapterRanges, isPdfBook, annotations, pendingSelection, ttsHighlightRange]);
 
   if (!currentBook) return <div>请选择书籍</div>;
 
@@ -1011,16 +1073,7 @@ export default function Reader() {
                 <div style={{ padding: '20px 0' }}>
                   <PdfDocumentView
                     documentData={pdfData ?? undefined}
-                    pages={chapterRanges.map((chapter, index) => ({
-                      id: chapter.id,
-                      title: chapter.title,
-                      pageNumber: index + 1,
-                      startOffset: chapter.startOffset,
-                      content: chapter.content,
-                      annotations: getChapterAnnotations(chapter.id),
-                      pendingSelectionRange: getChapterPendingSelection(chapter.id),
-                      highlightRange: getChapterTTSHighlight(chapter.id),
-                    }))}
+                    pages={pdfPages}
                     scrollContainer={contentContainerRef.current}
                     activeAnnotationId={selectedAnnotation?.id}
                     onAnnotate={handleSelectionCaptured}
@@ -1133,101 +1186,95 @@ export default function Reader() {
                 flexDirection: 'column',
               }}
             >
-              <div style={{ padding: '20px 22px 14px', borderBottom: `1px solid ${themePalette.border}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontSize: '22px', fontWeight: 700, color: themePalette.text, marginBottom: '4px' }}>工具</div>
-                    <div style={{ fontSize: '12px', color: themePalette.subText, marginBottom: '4px' }}>{currentBook.title}</div>
-                    <div style={{ fontSize: '13px', color: themePalette.subText }}>当前来源：{aiContext.sourceLabel}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowToolsDrawer(false)}
-                    style={{
-                      padding: '6px 10px',
-                      border: `1px solid ${themePalette.border}`,
-                      borderRadius: '999px',
-                      background: themePalette.cardBg,
-                      color: themePalette.subText,
-                    }}
-                  >
-                    关闭
-                  </button>
+              <div style={{ padding: '16px 20px 12px', borderBottom: `1px solid ${themePalette.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: themePalette.text }}>AI 问书</div>
+                  <div style={{ fontSize: '12px', color: themePalette.subText, marginTop: '2px' }}>{currentBook.title}・{aiContext.sourceLabel}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowToolsDrawer(false)}
+                  style={{ padding: '4px 10px', border: `1px solid ${themePalette.border}`, borderRadius: '999px', background: themePalette.cardBg, color: themePalette.subText, fontSize: '13px' }}
+                >
+                  关闭
+                </button>
+              </div>
+
+              <div style={{ padding: '14px 18px', borderBottom: `1px solid ${themePalette.border}`, background: themePalette.accentBg }}>
+                <div style={{ color: themePalette.accentText, lineHeight: 1.75, fontSize: '13.5px', maxHeight: '96px', overflowY: 'auto' }}>
+                  {aiContext.text || '选中文本或标注后，内容显示在这里。'}
                 </div>
               </div>
 
-              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: 0 }}>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: themePalette.text }}>AI 问书</div>
-                <div style={{ background: themePalette.accentBg, border: `1px solid ${themePalette.accentBorder}`, borderRadius: '14px', padding: '14px 16px', color: themePalette.accentText, lineHeight: 1.75, fontSize: '14px', maxHeight: '140px', overflowY: 'auto' }}>
-                  {aiContext.text || '当前没有可用文本上下文。'}
-                </div>
-
+              <div data-testid="ai-answer" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px' }}>
                 {!aiConfigured ? (
-                  <div style={{ background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, borderRadius: '16px', padding: '16px', color: themePalette.text, lineHeight: 1.8 }}>
+                  <div style={{ background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, borderRadius: '12px', padding: '16px', color: themePalette.text, lineHeight: 1.8 }}>
                     <div style={{ fontWeight: 600, marginBottom: '8px' }}>AI 当前未配置</div>
                     <div style={{ marginBottom: '12px' }}>请先在设置页填写 API Key 和 Base URL。设置页只负责配置和状态，保存后这里会立即可用。</div>
                     <button type="button" onClick={() => navigate('/settings')}>去设置</button>
                   </div>
-                ) : (
-                  <>
-                    <div data-testid="ai-answer" style={{ background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, borderRadius: '16px', padding: '18px', flex: 1, minHeight: '220px', display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
-                      <div style={{ fontSize: '13px', color: themePalette.subText }}>回答</div>
-                      {aiLoading ? (
-                        <div style={{ color: themePalette.text, lineHeight: 1.9 }}>思考中...</div>
-                      ) : aiAnswer ? (
-                        <>
-                          <div style={{ color: themePalette.text, lineHeight: 1.92, fontSize: '15px' }}>{aiAnswer}</div>
-                          {aiCitations.length > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              {aiCitations.map((citation) => (
-                                <div key={citation.chunkId} style={{ borderTop: `1px solid ${themePalette.border}`, paddingTop: '8px' }}>
-                                  <div style={{ fontSize: '12px', color: themePalette.subText, marginBottom: '4px' }}>{citation.chapterTitle}</div>
-                                  <div style={{ fontSize: '14px', lineHeight: 1.8, color: themePalette.text }}>{citation.text}</div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </>
-                      ) : (
-                        <div style={{ color: themePalette.subText, lineHeight: 1.9 }}>从当前选中文本、当前标注或当前章节发起提问，回答会显示在这里。</div>
-                      )}
-                      {aiError ? <div role="alert" style={{ color: '#cf1322' }}>{aiError}</div> : null}
-                    </div>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {aiPromptSuggestions.map((suggestion) => (
-                        <button
-                          key={suggestion}
-                          type="button"
-                          onClick={() => setAIQuestion(suggestion)}
-                          style={{ padding: '10px 14px', borderRadius: '999px', background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, color: themePalette.text, fontSize: '13px' }}
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-                        <textarea
-                          placeholder="提出问题，获得来自书籍的解答..."
-                          value={aiQuestion}
-                          onChange={(event) => setAIQuestion(event.target.value)}
-                          rows={3}
-                          style={{ flex: 1, resize: 'none', background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, borderRadius: '16px', padding: '14px 16px', color: themePalette.text }}
-                        />
-                      <button
-                        type="button"
-                        onClick={() => void handleAskAI()}
-                        disabled={!aiQuestion.trim() || aiLoading}
-                        style={{ minWidth: '82px', height: '42px', borderRadius: '999px', border: 'none', background: '#44a6ff', color: '#fff', padding: '0 16px', fontWeight: 600 }}
-                      >
-                        发送问题
-                        </button>
+                ) : aiLoading ? (
+                  <div style={{ color: themePalette.subText, lineHeight: 1.9, padding: '8px 0' }}>思考中...</div>
+                ) : aiAnswer ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ color: themePalette.text, lineHeight: 1.92, fontSize: '14.5px', whiteSpace: 'pre-wrap' }}>{aiAnswer}</div>
+                    {aiCitations.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: `1px solid ${themePalette.border}`, paddingTop: '12px' }}>
+                        <div style={{ fontSize: '12px', color: themePalette.subText, fontWeight: 600 }}>引用来源</div>
+                        {aiCitations.map((citation) => (
+                          <div key={citation.chunkId} style={{ background: themePalette.cardBg, borderRadius: '8px', padding: '10px 12px' }}>
+                            <div style={{ fontSize: '11px', color: themePalette.subText, marginBottom: '3px' }}>{citation.chapterTitle}</div>
+                            <div style={{ fontSize: '13px', lineHeight: 1.7, color: themePalette.text }}>{citation.text}</div>
+                          </div>
+                        ))}
                       </div>
-                    </>
-                  )}
+                    ) : null}
+                  </div>
+                ) : (
+                  <div style={{ color: themePalette.subText, lineHeight: 1.9, fontSize: '13.5px', padding: '8px 0' }}>从当前选中文本、标注或章节发起提问，回答会显示在这里。</div>
+                )}
+                {aiError ? <div role="alert" style={{ color: '#cf1322', marginTop: '8px' }}>{aiError}</div> : null}
+              </div>
 
+              {aiConfigured ? (
+                <div style={{ padding: '12px 18px 16px', borderTop: `1px solid ${themePalette.border}`, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {aiPromptSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onClick={() => setAIQuestion(suggestion)}
+                        style={{ padding: '7px 12px', borderRadius: '999px', background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, color: themePalette.text, fontSize: '12.5px' }}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                    <textarea
+                      placeholder="提出问题..."
+                      value={aiQuestion}
+                      onChange={(event) => setAIQuestion(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                          event.preventDefault();
+                          void handleAskAI();
+                        }
+                      }}
+                      rows={2}
+                      style={{ flex: 1, resize: 'none', background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, borderRadius: '12px', padding: '10px 14px', color: themePalette.text, fontSize: '13.5px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleAskAI()}
+                      disabled={!aiQuestion.trim() || aiLoading}
+                      style={{ minWidth: '64px', height: '38px', borderRadius: '999px', border: 'none', background: (!aiQuestion.trim() || aiLoading) ? '#b3d9ff' : '#44a6ff', color: '#fff', padding: '0 14px', fontWeight: 600, fontSize: '13px', cursor: (!aiQuestion.trim() || aiLoading) ? 'default' : 'pointer' }}
+                    >
+                      发送
+                    </button>
+                  </div>
                 </div>
+              ) : null}
             </aside>
           ) : null}
         </div>

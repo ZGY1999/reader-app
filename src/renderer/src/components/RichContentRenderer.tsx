@@ -11,7 +11,20 @@ interface RichContentRendererProps {
   style?: CSSProperties;
   offsetBase?: number;
   activeAnnotationId?: string;
-  onAnnotate?: (data: { startOffset: number; endOffset: number; text: string; rect: DOMRect }) => void;
+  onAnnotate?: (data: {
+    startOffset: number;
+    endOffset: number;
+    text: string;
+    rect: DOMRect;
+    rects?: Array<{
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+      right: number;
+      bottom: number;
+    }>;
+  }) => void;
   onSelectAnnotation?: (annotation: Annotation) => void;
   onClearSelection?: () => void;
 }
@@ -150,6 +163,14 @@ export default function RichContentRenderer({
       endOffset,
       text,
       rect: range.getBoundingClientRect(),
+      rects: (typeof range.getClientRects === 'function' ? Array.from(range.getClientRects()) : []).map((clientRect) => ({
+        left: clientRect.left,
+        top: clientRect.top,
+        width: clientRect.width,
+        height: clientRect.height,
+        right: clientRect.right,
+        bottom: clientRect.bottom,
+      })),
     });
   };
 

@@ -11,7 +11,20 @@ interface TextRendererProps {
   activeAnnotationId?: string;
   highlightRange?: { startOffset: number; endOffset: number } | null;
   style?: CSSProperties;
-  onAnnotate?: (data: { startOffset: number; endOffset: number; text: string; rect: DOMRect }) => void;
+  onAnnotate?: (data: {
+    startOffset: number;
+    endOffset: number;
+    text: string;
+    rect: DOMRect;
+    rects?: Array<{
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+      right: number;
+      bottom: number;
+    }>;
+  }) => void;
   onSelectAnnotation?: (annotation: Annotation) => void;
   onClearSelection?: () => void;
 }
@@ -75,8 +88,16 @@ export default function TextRenderer({
     }
 
     const rect = range.getBoundingClientRect();
+    const rects = (typeof range.getClientRects === 'function' ? Array.from(range.getClientRects()) : []).map((clientRect) => ({
+      left: clientRect.left,
+      top: clientRect.top,
+      width: clientRect.width,
+      height: clientRect.height,
+      right: clientRect.right,
+      bottom: clientRect.bottom,
+    }));
 
-    onAnnotate({ startOffset, endOffset, text, rect });
+    onAnnotate({ startOffset, endOffset, text, rect, rects });
   };
 
   const renderContent = () => {

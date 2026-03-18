@@ -95,15 +95,106 @@ Notes:
 - PDF import throwing `DOMMatrix is not defined`
 - AI drawer incorrectly containing TTS
 
+## 2026-03-17 PDF Follow-up
+
+The work did continue after the original 2026-03-16 handoff. This is the latest state the next AI should trust.
+
+### What changed on 2026-03-17
+
+Files touched:
+- `src/renderer/src/components/PdfDocumentView.tsx`
+- `src/renderer/src/components/pdf-view.css`
+- `src/renderer/src/pages/Reader.tsx`
+- `src/renderer/src/components/TextRenderer.tsx`
+- `src/renderer/src/components/RichContentRenderer.tsx`
+- `src/renderer/src/components/PdfDocumentView.test.tsx`
+
+Key changes made:
+- PDF annotation/selection overlays no longer grab pointer events, to reduce drag-to-select failures.
+- PDF selection offsets no longer depend on brittle DOM boundary guessing alone:
+  - start/end are derived from prefix `Range` text lengths
+  - this was intended to fix off-by-one behavior at later text nodes / element boundaries
+- Pending PDF selection now carries real `client rects` from the actual selection, so the viewer can render selection feedback from real geometry instead of fully reconstructing it from offsets.
+- PDF overlay rendering now:
+  - merges nearby rects on the same line
+  - uses wider right-side padding
+  - distinguishes drag-time preview vs post-mouseup confirmed selection styling
+- Reader scroll persistence is now debounced, which improved PDF smoothness.
+- PDF initial visible page/overscan work was reduced slightly for performance.
+
+### Verification completed after the 2026-03-17 changes
+
+These passed:
+
+```powershell
+npm test -- --run src/renderer/src/components/PdfDocumentView.test.tsx
+npm test -- --run tests/Reader.test.tsx
+npm run build
+```
+
+### Important real-app feedback from the user after those fixes
+
+This is the most important part for the next AI:
+
+- `PDF selection no longer frequently fails`
+- `PDF performance feels better / smoother than before`
+- `BUT the selection/highlight still does not fully cover the right side of the selected text`
+- `BUT the interaction still does not feel right`
+
+The user's wording:
+- selection still "盖不住" on the right side
+- it is still not as smooth as EPUB
+- they want the marker/highlight to feel progressive while dragging:
+  - "划到那，加深的马克笔跟随加深"
+  - i.e. not a sudden post-selection block appearing all at once
+
+### What is likely still wrong
+
+The current codebase has improved the PDF selection path, but it is not yet user-confirmed fixed.
+
+Most likely remaining problems:
+- Real Electron `Range.getClientRects()` in the PDF text layer is still narrower than the painted glyphs near line ends, even after extra padding / rect merging.
+- The current preview is still not visually convincing enough compared with EPUB:
+  - the user wants a more continuous "marker following the drag" feel
+  - not just "selection succeeds and then an overlay appears"
+- If the right-edge leak is still present after the latest preview/merge changes, the next AI should assume that simple padding tweaks are not enough.
+
+### Suggested next debugging direction
+
+Do this in the real Electron app, not just by tests:
+
+1. Launch `start-reader.cmd`.
+2. Reproduce with the user's current PDF selection flow.
+3. Inspect whether the visible blue highlight is:
+   - coming from the custom overlay divs
+   - or from native selection in the PDF text layer
+4. Compare:
+   - `range.getClientRects()`
+   - actual text layer span boxes
+   - visible canvas text extents near the right edge
+5. If right-edge coverage is still short:
+   - stop only tweaking padding
+   - consider computing line-level highlight geometry from text-layer spans / per-line text items instead of relying purely on range rects
+6. If the feel is still too abrupt:
+   - make the drag-time preview visually stronger and more continuous
+   - think in terms of a live marker stroke, not just a final overlay
+
+### Do not waste time re-fixing these
+
+These are already improved and no longer the primary blocker:
+- PDF import/runtime compatibility
+- repeated PDF selection outright failing
+- general PDF performance being completely unusable
+
 ## Still Open / To Verify Tomorrow
 
-These are the next things to continue from:
+These are the next things to continue from now:
 
-1. Real-app confirmation from user
+1. Highest priority: real-app PDF selection fidelity
 - Re-test inside the Electron app:
-  - EPUB image display
-  - EPUB selection toolbar
-  - PDF import/open
+  - right-edge coverage of selection/highlight
+  - drag-time marker feel vs EPUB
+  - whether the latest `selection preview -> confirmed selection` path actually feels better
 
 2. TTS coverage for EPUB/PDF
 - User previously reported:
@@ -120,6 +211,8 @@ These are the next things to continue from:
   - basic preserved markup
 - Current PDF behavior:
   - page viewer
+  - selection works more reliably than before
+  - still visually wrong at the right edge according to the user
 - Possible remaining fidelity gaps:
   - complex layout edge cases
   - image-heavy chapters
@@ -149,8 +242,8 @@ start-reader.cmd
 
 1. Open this handoff file.
 2. Launch via `start-reader.cmd`.
-3. Ask the user to re-check:
-   - EPUB image display
-   - EPUB selection toolbar
-   - PDF import/open
-4. Continue from the next real-app failure, not from assumptions.
+3. Reproduce the PDF selection issue first.
+4. Focus on these two remaining user-facing problems before touching anything else:
+   - right side of the selected/highlighted text still not fully covered
+   - PDF selection feedback still does not feel like a live marker the way EPUB does
+5. Continue from the real Electron behavior, not from assumptions or test-only reasoning.

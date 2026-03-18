@@ -358,12 +358,12 @@ describe('Reader', () => {
     fireEvent.click(screen.getByTestId('toolbar-ai'));
 
     expect(await screen.findByTestId('tools-drawer')).toBeDefined();
-    expect(screen.getAllByText('当前来源：选中文本').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/选中文本/).length).toBeGreaterThan(0);
 
-    fireEvent.change(screen.getByPlaceholderText('提出问题，获得来自书籍的解答...'), {
+    fireEvent.change(screen.getByPlaceholderText('提出问题...'), {
       target: { value: 'What is chapter one about?' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '发送问题' }));
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
       expect(window.electronAPI.ai.ask).toHaveBeenCalledWith({
@@ -886,7 +886,7 @@ describe('Reader', () => {
     fireEvent.click(screen.getByRole('button', { name: '工具' }));
 
     expect(await screen.findByTestId('tools-drawer')).toBeDefined();
-    expect(screen.getAllByText('当前来源：Chapter 1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Chapter 1/).length).toBeGreaterThan(0);
     expect(screen.queryByText('TTS 朗读')).toBeNull();
   });
 

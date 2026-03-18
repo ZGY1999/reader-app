@@ -10,6 +10,7 @@ export interface ElectronAPI {
     getPdfJsConfig: () => Promise<{
       moduleUrl: string;
       workerUrl: string;
+      standardFontDataUrl: string;
     }>;
   };
 

@@ -8,6 +8,7 @@ vi.mock('electron', () => ({
     whenReady: vi.fn(() => Promise.resolve()),
     on: vi.fn(),
     getPath: vi.fn(() => '/tmp'),
+    getAppPath: vi.fn(() => '/app'),
     quit: vi.fn(),
   },
   ipcMain: {
@@ -95,5 +96,23 @@ describe('Main Process', () => {
     expect(registeredChannels).not.toContain('player:setRate');
     expect(registeredChannels).not.toContain('highlight:updateProgress');
     expect(mockCreateWindow).toHaveBeenCalled();
+  });
+
+  it('exposes the standard font asset path in the pdf.js runtime config', async () => {
+    await import('../../src/main/index');
+    await Promise.resolve();
+
+    const runtimeConfigHandler = mockHandle.mock.calls.find((call) => call[0] === 'runtime:getPdfJsConfig')?.[1];
+    expect(runtimeConfigHandler).toBeTypeOf('function');
+
+    const config = await runtimeConfigHandler({}, {}) as {
+      moduleUrl: string;
+      workerUrl: string;
+      standardFontDataUrl?: string;
+    };
+
+    expect(config.moduleUrl).toContain('/pdfjs-dist/legacy/build/pdf.mjs');
+    expect(config.workerUrl).toContain('/pdfjs-dist/legacy/build/pdf.worker.min.mjs');
+    expect(config.standardFontDataUrl).toContain('/pdfjs-dist/standard_fonts/');
   });
 });

@@ -48,10 +48,12 @@ app.whenReady().then(async () => {
     const appPath = app.getAppPath();
     const modulePath = path.join(appPath, 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.mjs');
     const workerPath = path.join(appPath, 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs');
+    const standardFontDir = path.join(appPath, 'node_modules', 'pdfjs-dist', 'standard_fonts');
 
     return {
       moduleUrl: pathToFileURL(modulePath).href,
       workerUrl: pathToFileURL(workerPath).href,
+      standardFontDataUrl: `${pathToFileURL(standardFontDir).href}/`,
     };
   });
 
