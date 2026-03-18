@@ -34,6 +34,13 @@ describe('Preload', () => {
           getStatus: expect.any(Function),
           ask: expect.any(Function),
         }),
+        aiChat: expect.objectContaining({
+          listThreads: expect.any(Function),
+          createThread: expect.any(Function),
+          listMessages: expect.any(Function),
+          appendMessage: expect.any(Function),
+          touchThread: expect.any(Function),
+        }),
         runtime: expect.objectContaining({
           getPdfJsConfig: expect.any(Function),
         }),
@@ -57,6 +64,7 @@ describe('Preload', () => {
 
     expect(Object.keys(exposedAPI).sort()).toEqual([
       'ai',
+      'aiChat',
       'annotations',
       'deleteBook',
       'getBook',

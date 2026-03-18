@@ -20,6 +20,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getStatus: () => ipcRenderer.invoke('ai:getStatus'),
     ask: (data: { bookId: string; question: string }) => ipcRenderer.invoke('ai:ask', data),
   },
+  aiChat: {
+    listThreads: (bookId: string) => ipcRenderer.invoke('ai-chat:listThreads', bookId),
+    createThread: (data: any) => ipcRenderer.invoke('ai-chat:createThread', data),
+    listMessages: (threadId: string) => ipcRenderer.invoke('ai-chat:listMessages', threadId),
+    appendMessage: (data: any) => ipcRenderer.invoke('ai-chat:appendMessage', data),
+    touchThread: (threadId: string) => ipcRenderer.invoke('ai-chat:touchThread', threadId),
+  },
   tts: {
     synthesize: (data: { text: string; voice?: string; rate?: number }) => ipcRenderer.invoke('tts:synthesize', data),
   },

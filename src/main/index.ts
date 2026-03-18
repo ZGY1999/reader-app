@@ -5,6 +5,7 @@ import { BookHandler } from './ipc/book.handler';
 import { AnnotationHandler } from './ipc/annotation.handler';
 import { SettingsHandler } from './ipc/settings.handler';
 import { AIHandler } from './ipc/ai.handler';
+import { AIChatHandler } from './ipc/ai-chat.handler';
 import { TTSService } from '../services/tts/tts.service';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
@@ -16,6 +17,7 @@ let bookHandler: BookHandler;
 let annotationHandler: AnnotationHandler;
 let settingsHandler: SettingsHandler;
 let aiHandler: AIHandler;
+let aiChatHandler: AIChatHandler;
 
 // 服务实例
 const ttsService = new TTSService();
@@ -27,6 +29,7 @@ app.whenReady().then(async () => {
   annotationHandler = new AnnotationHandler(db);
   settingsHandler = new SettingsHandler(db);
   aiHandler = new AIHandler(bookHandler, settingsHandler);
+  aiChatHandler = new AIChatHandler(db);
 
   // 书籍管理
   ipcMain.handle('import-book', async (_, filePath: string) => bookHandler.importBook(filePath));
@@ -59,6 +62,11 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('ai:getStatus', async () => aiHandler.getStatus());
   ipcMain.handle('ai:ask', async (_, options) => aiHandler.ask(options));
+  ipcMain.handle('ai-chat:listThreads', async (_, bookId: string) => aiChatHandler.listThreads(bookId));
+  ipcMain.handle('ai-chat:createThread', async (_, data) => aiChatHandler.createThread(data));
+  ipcMain.handle('ai-chat:listMessages', async (_, threadId: string) => aiChatHandler.listMessages(threadId));
+  ipcMain.handle('ai-chat:appendMessage', async (_, data) => aiChatHandler.appendMessage(data));
+  ipcMain.handle('ai-chat:touchThread', async (_, threadId: string) => aiChatHandler.touchThread(threadId));
 
   // TTS 服务
   ipcMain.handle('tts:synthesize', async (_, options) => {

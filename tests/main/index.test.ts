@@ -85,6 +85,11 @@ describe('Main Process', () => {
 
     expect(registeredChannels).toContain('ai:getStatus');
     expect(registeredChannels).toContain('ai:ask');
+    expect(registeredChannels).toContain('ai-chat:listThreads');
+    expect(registeredChannels).toContain('ai-chat:createThread');
+    expect(registeredChannels).toContain('ai-chat:listMessages');
+    expect(registeredChannels).toContain('ai-chat:appendMessage');
+    expect(registeredChannels).toContain('ai-chat:touchThread');
     expect(registeredChannels).toContain('runtime:getPdfJsConfig');
     expect(registeredChannels).toContain('tts:synthesize');
     expect(registeredChannels).not.toContain('player:play');

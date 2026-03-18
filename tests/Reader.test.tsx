@@ -26,6 +26,32 @@ const readingPayload = {
   ],
 };
 
+const createAIThread = (overrides: Record<string, unknown> = {}) => ({
+  id: 'thread-1',
+  bookId: 'book-1',
+  chapterId: 'ch-1',
+  chapterTitle: 'Chapter 1',
+  title: 'Chapter 1 · 开篇',
+  createdAt: 1,
+  updatedAt: 1,
+  ...overrides,
+});
+
+const createAIMessage = (overrides: Record<string, unknown> = {}) => ({
+  id: 'message-1',
+  threadId: 'thread-1',
+  bookId: 'book-1',
+  role: 'assistant',
+  text: '默认回答',
+  sourceType: 'chapter',
+  sourceText: 'Chapter one content',
+  chapterId: 'ch-1',
+  chapterTitle: 'Chapter 1',
+  citationsJson: null,
+  createdAt: 1,
+  ...overrides,
+});
+
 class MockAudio {
   static instances: MockAudio[] = [];
 
@@ -127,6 +153,13 @@ describe('Reader', () => {
       ai: {
         getStatus: vi.fn().mockResolvedValue({ configured: false }),
         ask: vi.fn(),
+      },
+      aiChat: {
+        listThreads: vi.fn().mockResolvedValue([]),
+        createThread: vi.fn(),
+        listMessages: vi.fn().mockResolvedValue([]),
+        appendMessage: vi.fn(),
+        touchThread: vi.fn().mockResolvedValue({ success: true, updatedAt: Date.now() }),
       },
       annotations: {
         create: vi.fn().mockResolvedValue({
@@ -311,8 +344,36 @@ describe('Reader', () => {
     expect(screen.queryByTestId('selection-toolbar')).toBeNull();
   });
 
-  it('opens the AI drawer from the floating toolbar and asks questions there', async () => {
+  it('opens the AI overlay from the floating toolbar and appends chat messages', async () => {
     window.electronAPI.ai.getStatus = vi.fn().mockResolvedValue({ configured: true });
+    window.electronAPI.aiChat.createThread = vi.fn().mockResolvedValue(createAIThread());
+    window.electronAPI.aiChat.appendMessage = vi
+      .fn()
+      .mockResolvedValueOnce(createAIMessage({
+        id: 'message-user-1',
+        role: 'user',
+        text: 'What is chapter one about?',
+        sourceType: 'selection',
+        sourceText: 'Chapter',
+      }))
+      .mockResolvedValueOnce(createAIMessage({
+        id: 'message-assistant-1',
+        role: 'assistant',
+        text: 'Chapter 1 focuses on the opening discussion.',
+        sourceType: 'selection',
+        sourceText: 'Chapter',
+        citationsJson: JSON.stringify([
+          {
+            chunkId: 'book-1:chunk-1',
+            chapterId: 'ch-1',
+            chapterTitle: 'Chapter 1',
+            text: 'Chapter one content',
+            startOffset: 0,
+            endOffset: 19,
+            score: 0.91,
+          },
+        ]),
+      }));
     window.electronAPI.ai.ask = vi.fn().mockResolvedValue({
       success: true,
       answer: 'Chapter 1 focuses on the opening discussion.',
@@ -372,10 +433,19 @@ describe('Reader', () => {
       });
     });
 
-    const answerPanel = await screen.findByTestId('ai-answer');
-    expect(answerPanel.textContent).toContain('Chapter 1 focuses on the opening discussion.');
-    expect(answerPanel.textContent).toContain('Chapter 1');
-    expect(answerPanel.textContent).toContain('Chapter one content');
+    await waitFor(() => {
+      expect(window.electronAPI.aiChat.createThread).toHaveBeenCalledWith(expect.objectContaining({
+        bookId: 'book-1',
+        chapterId: 'ch-1',
+        chapterTitle: 'Chapter 1',
+      }));
+    });
+
+    expect(await screen.findByTestId('ai-message-message-user-1')).toBeDefined();
+    expect(screen.getByTestId('ai-message-message-user-1').textContent).toContain('What is chapter one about?');
+    expect(await screen.findByTestId('ai-message-message-assistant-1')).toBeDefined();
+    expect(screen.getByTestId('ai-message-message-assistant-1').textContent).toContain('Chapter 1 focuses on the opening discussion.');
+    expect(screen.getByTestId('ai-message-message-assistant-1').textContent).toContain('Chapter one content');
   });
 
   it('starts TTS from the selection toolbar without opening the AI drawer', async () => {
@@ -873,7 +943,78 @@ describe('Reader', () => {
     expect(screen.getByTestId('reader-page-label').textContent).toContain('第 2 / 5 页');
   });
 
-  it('opens the AI drawer from the header tool button with current chapter context', async () => {
+  it('restores the latest persisted AI thread when opening the overlay panel', async () => {
+    window.electronAPI.ai.getStatus = vi.fn().mockResolvedValue({ configured: true });
+    window.electronAPI.aiChat.listThreads = vi.fn().mockResolvedValue([
+      createAIThread({
+        id: 'thread-2',
+        chapterId: 'ch-2',
+        chapterTitle: 'Chapter 2',
+        title: 'Chapter 2 · 深入',
+        createdAt: 2,
+        updatedAt: 20,
+      }),
+      createAIThread(),
+    ]);
+    window.electronAPI.aiChat.listMessages = vi.fn().mockResolvedValue([
+      createAIMessage({
+        id: 'thread-2-user',
+        threadId: 'thread-2',
+        role: 'user',
+        text: '这一章在讲什么？',
+        sourceType: 'chapter',
+        sourceText: 'Chapter two content',
+        chapterId: 'ch-2',
+        chapterTitle: 'Chapter 2',
+      }),
+      createAIMessage({
+        id: 'thread-2-assistant',
+        threadId: 'thread-2',
+        role: 'assistant',
+        text: '这一章在展开第二部分内容。',
+        sourceType: 'chapter',
+        sourceText: 'Chapter two content',
+        chapterId: 'ch-2',
+        chapterTitle: 'Chapter 2',
+        citationsJson: JSON.stringify([
+          {
+            chunkId: 'chunk-2',
+            chapterId: 'ch-2',
+            chapterTitle: 'Chapter 2',
+            text: 'Chapter two content',
+            startOffset: 21,
+            endOffset: 40,
+            score: 0.92,
+          },
+        ]),
+      }),
+    ]);
+
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    await screen.findByTestId('text-renderer-ch-1');
+    await waitFor(() => {
+      expect(window.electronAPI.aiChat.listThreads).toHaveBeenCalledWith('book-1');
+      expect(window.electronAPI.aiChat.listMessages).toHaveBeenCalledWith('thread-2');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '工具' }));
+
+    expect(await screen.findByTestId('tools-drawer')).toBeDefined();
+    expect(screen.getByText('Chapter 2 · 深入')).toBeDefined();
+    expect(screen.getByTestId('ai-message-thread-2-user').textContent).toContain('这一章在讲什么？');
+    expect(screen.getByTestId('ai-message-thread-2-assistant').textContent).toContain('这一章在展开第二部分内容。');
+    expect(screen.getByTestId('ai-message-thread-2-assistant').textContent).toContain('Chapter two content');
+  });
+
+  it('renders the AI panel as an overlay without shrinking the reader content', async () => {
+    window.electronAPI.ai.getStatus = vi.fn().mockResolvedValue({ configured: true });
     useBookStore.getState().setCurrentBook(readingPayload.book);
 
     render(
@@ -885,9 +1026,143 @@ describe('Reader', () => {
     await screen.findByTestId('text-renderer-ch-1');
     fireEvent.click(screen.getByRole('button', { name: '工具' }));
 
-    expect(await screen.findByTestId('tools-drawer')).toBeDefined();
-    expect(screen.getAllByText(/Chapter 1/).length).toBeGreaterThan(0);
-    expect(screen.queryByText('TTS 朗读')).toBeNull();
+    const drawer = await screen.findByTestId('tools-drawer');
+    const contentFrame = screen.getByTestId('reader-content-frame');
+
+    expect(drawer.getAttribute('style')).toContain('position: absolute');
+    expect(contentFrame.getAttribute('style')).not.toContain('calc(100% - 420px)');
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    expect(screen.queryByTestId('tools-drawer')).toBeNull();
+  });
+
+  it('keeps the user message in chat when the AI request fails', async () => {
+    window.electronAPI.ai.getStatus = vi.fn().mockResolvedValue({ configured: true });
+    window.electronAPI.aiChat.createThread = vi.fn().mockResolvedValue(createAIThread());
+    window.electronAPI.aiChat.appendMessage = vi
+      .fn()
+      .mockResolvedValueOnce(createAIMessage({
+        id: 'message-user-failed',
+        role: 'user',
+        text: '请总结这一章',
+        sourceType: 'chapter',
+        sourceText: 'Chapter one content',
+      }))
+      .mockResolvedValueOnce(createAIMessage({
+        id: 'message-system-failed',
+        role: 'system',
+        text: 'network down',
+        sourceType: 'chapter',
+        sourceText: 'Chapter one content',
+      }));
+    window.electronAPI.ai.ask = vi.fn().mockRejectedValue(new Error('network down'));
+
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    await screen.findByTestId('text-renderer-ch-1');
+    fireEvent.click(screen.getByRole('button', { name: '工具' }));
+    fireEvent.change(screen.getByPlaceholderText('提出问题...'), {
+      target: { value: '请总结这一章' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    expect(await screen.findByTestId('ai-message-message-user-failed')).toBeDefined();
+    expect(screen.getByTestId('ai-message-message-system-failed').textContent).toContain('network down');
+  });
+
+  it('creates a new chapter topic once and reuses it for same-chapter follow-ups', async () => {
+    const createdThreads = [
+      createAIThread({
+        id: 'thread-ch-1',
+        title: 'Chapter 1 · 开篇',
+      }),
+      createAIThread({
+        id: 'thread-ch-2',
+        chapterId: 'ch-2',
+        chapterTitle: 'Chapter 2',
+        title: 'Chapter 2 · 深入',
+      }),
+    ];
+
+    window.electronAPI.ai.getStatus = vi.fn().mockResolvedValue({ configured: true });
+    window.electronAPI.aiChat.createThread = vi
+      .fn()
+      .mockResolvedValueOnce(createdThreads[0])
+      .mockResolvedValueOnce(createdThreads[1]);
+    window.electronAPI.aiChat.appendMessage = vi.fn().mockImplementation(async (input) => createAIMessage({
+      id: `message-${vi.mocked(window.electronAPI.aiChat.appendMessage).mock.calls.length + 1}`,
+      threadId: input.threadId,
+      role: input.role,
+      text: input.text,
+      sourceType: input.sourceType,
+      sourceText: input.sourceText,
+      chapterId: input.chapterId,
+      chapterTitle: input.chapterTitle,
+      citationsJson: input.citations ? JSON.stringify(input.citations) : null,
+    }));
+    window.electronAPI.ai.ask = vi.fn().mockResolvedValue({
+      success: true,
+      answer: '好的',
+      citations: [],
+    });
+
+    useBookStore.getState().setCurrentBook(readingPayload.book);
+
+    render(
+      <BrowserRouter>
+        <Reader />
+      </BrowserRouter>
+    );
+
+    const scrollContainer = await screen.findByTestId('reader-scroll-container');
+    const chapterTwoSection = await screen.findByTestId('chapter-section-ch-2');
+    Object.defineProperty(chapterTwoSection, 'offsetTop', { value: 480, configurable: true });
+    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true, configurable: true });
+
+    fireEvent.click(screen.getByRole('button', { name: '工具' }));
+    fireEvent.change(screen.getByPlaceholderText('提出问题...'), {
+      target: { value: '先说第一章' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.aiChat.createThread).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        chapterId: 'ch-1',
+        chapterTitle: 'Chapter 1',
+      }));
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chapter 2' }));
+    fireEvent.change(screen.getByPlaceholderText('提出问题...'), {
+      target: { value: '再说第二章' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.aiChat.createThread).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        chapterId: 'ch-2',
+        chapterTitle: 'Chapter 2',
+      }));
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('提出问题...'), {
+      target: { value: '继续第二章' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.aiChat.createThread).toHaveBeenCalledTimes(2);
+      expect(window.electronAPI.aiChat.appendMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+        threadId: 'thread-ch-2',
+        role: 'assistant',
+      }));
+    });
   });
 
   it('applies reading appearance settings only to the reading content area', async () => {

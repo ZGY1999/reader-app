@@ -6,7 +6,7 @@ import RichContentRenderer from '../components/RichContentRenderer';
 import TextRenderer from '../components/TextRenderer';
 import { api } from '../api';
 import { useBookStore } from '../store';
-import { Annotation, Chapter } from '../types';
+import { AICitation, AIChatMessage, AIChatStoredMessage, AIChatThread, Annotation, Chapter } from '../types';
 
 interface PendingSelection {
   startOffset: number;
@@ -37,19 +37,12 @@ interface TTSTarget {
   sourceLabel: string;
 }
 
-interface AICitation {
-  chunkId: string;
-  chapterId?: string;
-  chapterTitle: string;
-  text: string;
-  startOffset: number;
-  endOffset: number;
-  score: number;
-}
-
 interface ReaderAIContext {
   sourceLabel: string;
   text: string;
+  sourceType: 'selection' | 'annotation' | 'chapter' | 'book';
+  chapterId: string | null;
+  chapterTitle: string;
 }
 
 interface ReadingSettings {
@@ -70,6 +63,42 @@ const defaultReadingSettings: ReadingSettings = {
   theme: 'light',
 };
 
+const parseAICitations = (citationsJson?: string | null): AICitation[] => {
+  if (!citationsJson) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(citationsJson) as AICitation[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const normalizeAIMessage = (message: AIChatStoredMessage): AIChatMessage => ({
+  id: message.id,
+  threadId: message.threadId,
+  bookId: message.bookId,
+  role: message.role,
+  text: message.text,
+  sourceType: message.sourceType,
+  sourceText: message.sourceText,
+  chapterId: message.chapterId,
+  chapterTitle: message.chapterTitle,
+  citations: parseAICitations(message.citationsJson),
+  createdAt: message.createdAt,
+});
+
+const sortAIThreads = (threads: AIChatThread[]) => (
+  [...threads].sort((left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt)
+);
+
+const buildAIThreadTitle = (chapterTitle: string, question: string) => {
+  const summary = question.trim().replace(/\s+/g, ' ').slice(0, 18);
+  return summary ? `${chapterTitle} · ${summary}` : chapterTitle;
+};
+
 export default function Reader() {
   const navigate = useNavigate();
   const currentBook = useBookStore((state) => state.currentBook);
@@ -81,10 +110,11 @@ export default function Reader() {
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [selectedAnnotation, setSelectedAnnotation] = useState<Annotation | null>(null);
   const [aiConfigured, setAIConfigured] = useState(false);
-  const [aiQuestion, setAIQuestion] = useState('');
-  const [aiAnswer, setAIAnswer] = useState('');
-  const [aiCitations, setAICitations] = useState<AICitation[]>([]);
-  const [aiError, setAIError] = useState('');
+  const [aiComposer, setAIComposer] = useState('');
+  const [aiThreads, setAIThreads] = useState<AIChatThread[]>([]);
+  const [activeAIThreadId, setActiveAIThreadId] = useState<string | null>(null);
+  const [aiMessages, setAIMessages] = useState<AIChatMessage[]>([]);
+  const [aiThreadMode, setAIThreadMode] = useState<'auto' | 'manual'>('auto');
   const [aiLoading, setAILoading] = useState(false);
   const [showToolsDrawer, setShowToolsDrawer] = useState(false);
   const [ttsState, setTTSState] = useState<TTSState>({
@@ -212,16 +242,24 @@ export default function Reader() {
 
   const aiContext = useMemo<ReaderAIContext>(() => {
     if (pendingSelection) {
+      const chapter = chapterRanges.find((item) => pendingSelection.startOffset >= item.startOffset && pendingSelection.endOffset <= item.endOffset);
       return {
         sourceLabel: '选中文本',
         text: pendingSelection.text,
+        sourceType: 'selection',
+        chapterId: chapter?.id ?? currentChapterId ?? null,
+        chapterTitle: chapter?.title ?? '当前章节',
       };
     }
 
     if (selectedAnnotation) {
+      const chapter = chapterRanges.find((item) => selectedAnnotation.startOffset >= item.startOffset && selectedAnnotation.endOffset <= item.endOffset);
       return {
         sourceLabel: '当前标注',
         text: selectedAnnotation.text,
+        sourceType: 'annotation',
+        chapterId: chapter?.id ?? currentChapterId ?? null,
+        chapterTitle: chapter?.title ?? '当前章节',
       };
     }
 
@@ -230,12 +268,18 @@ export default function Reader() {
       return {
         sourceLabel: activeChapter.title,
         text: activeChapter.content,
+        sourceType: 'chapter',
+        chapterId: activeChapter.id,
+        chapterTitle: activeChapter.title,
       };
     }
 
     return {
       sourceLabel: '全文',
       text: content,
+      sourceType: 'book',
+      chapterId: null,
+      chapterTitle: '全文',
     };
   }, [chapterRanges, content, currentChapterId, pendingSelection, selectedAnnotation]);
 
@@ -244,6 +288,11 @@ export default function Reader() {
     '为什么这里要强调这一点？',
     '用更通俗的语言解释一下',
   ], []);
+
+  const activeAIThread = useMemo(
+    () => aiThreads.find((thread) => thread.id === activeAIThreadId) ?? null,
+    [activeAIThreadId, aiThreads]
+  );
 
   const themePalette = useMemo(() => {
     if (readingSettings.theme === 'dark') {
@@ -285,13 +334,18 @@ export default function Reader() {
     let disposed = false;
 
     const loadReading = async () => {
-      const [payload, savedProgress, savedAnnotations, aiStatus, settings] = await Promise.all([
+      const [payload, savedProgress, savedAnnotations, aiStatus, settings, savedThreads] = await Promise.all([
         api.getBookContent(currentBook.id),
         api.getProgress(currentBook.id),
         api.annotations.list(currentBook.id),
         api.ai.getStatus(),
         api.settings.getAll(),
+        api.aiChat.listThreads(currentBook.id),
       ]);
+      const initialThread = (savedThreads[0] ?? null) as AIChatThread | null;
+      const savedMessages = initialThread
+        ? await api.aiChat.listMessages(initialThread.id)
+        : [];
 
       if (disposed) return;
 
@@ -304,10 +358,11 @@ export default function Reader() {
       setPendingSelection(null);
       setSelectedAnnotation(null);
       setAIConfigured(aiStatus.configured);
-      setAIQuestion('');
-      setAIAnswer('');
-      setAICitations([]);
-      setAIError('');
+      setAIComposer('');
+      setAIThreads(sortAIThreads(savedThreads as AIChatThread[]));
+      setActiveAIThreadId(initialThread?.id ?? null);
+      setAIMessages((savedMessages as AIChatStoredMessage[]).map(normalizeAIMessage));
+      setAIThreadMode('auto');
       setAILoading(false);
       setShowToolsDrawer(false);
       setTTSState({
@@ -349,7 +404,7 @@ export default function Reader() {
   useEffect(() => {
     if (!contentContainerRef.current) return;
     updateFooterMetrics(contentContainerRef.current);
-  }, [chapterRanges, showToolsDrawer]);
+  }, [chapterRanges]);
 
   useEffect(() => {
     if (pendingOffset === null || !contentContainerRef.current) return;
@@ -508,39 +563,141 @@ export default function Reader() {
 
   const handleOpenAIDrawer = () => {
     openToolsDrawer();
-    setAIError('');
-    setAIAnswer('');
-    setAICitations([]);
+  };
+
+  const handleSelectAIThread = async (threadId: string, mode: 'auto' | 'manual' = 'manual') => {
+    const messages = await api.aiChat.listMessages(threadId);
+    setActiveAIThreadId(threadId);
+    setAIThreadMode(mode);
+    setAIMessages((messages as AIChatStoredMessage[]).map(normalizeAIMessage));
+  };
+
+  const bumpAIThread = (threadId: string, updatedAt: number) => {
+    setAIThreads((currentThreads) => sortAIThreads(currentThreads.map((thread) => (
+      thread.id === threadId
+        ? {
+            ...thread,
+            updatedAt,
+          }
+        : thread
+    ))));
+  };
+
+  const appendLocalAIMessage = (message: AIChatStoredMessage) => {
+    setAIMessages((currentMessages) => [...currentMessages, normalizeAIMessage(message)]);
+  };
+
+  const resolveAIThreadForQuestion = async (question: string, context: ReaderAIContext) => {
+    if (!currentBook) {
+      return null;
+    }
+
+    const manualThread = aiThreadMode === 'manual'
+      ? aiThreads.find((thread) => thread.id === activeAIThreadId) ?? null
+      : null;
+    if (manualThread) {
+      return manualThread;
+    }
+
+    const chapterId = context.chapterId ?? null;
+    const activeThread = aiThreads.find((thread) => thread.id === activeAIThreadId) ?? null;
+    if (activeThread && activeThread.chapterId === chapterId) {
+      setAIThreadMode('auto');
+      return activeThread;
+    }
+
+    const matchedThread = aiThreads.find((thread) => thread.chapterId === chapterId) ?? null;
+    if (matchedThread) {
+      if (matchedThread.id !== activeAIThreadId) {
+        await handleSelectAIThread(matchedThread.id, 'auto');
+      } else {
+        setAIThreadMode('auto');
+      }
+      return matchedThread;
+    }
+
+    const createdThread = await api.aiChat.createThread({
+      bookId: currentBook.id,
+      chapterId,
+      chapterTitle: context.chapterTitle,
+      title: buildAIThreadTitle(context.chapterTitle, question),
+    }) as AIChatThread;
+
+    setAIThreads((currentThreads) => sortAIThreads([createdThread, ...currentThreads]));
+    setActiveAIThreadId(createdThread.id);
+    setAIThreadMode('auto');
+    setAIMessages([]);
+
+    return createdThread;
+  };
+
+  const persistAIMessage = async (threadId: string, role: 'user' | 'assistant' | 'system', text: string, context: ReaderAIContext, citations?: AICitation[]) => {
+    if (!currentBook) {
+      return null;
+    }
+
+    const savedMessage = await api.aiChat.appendMessage({
+      threadId,
+      bookId: currentBook.id,
+      role,
+      text,
+      sourceType: context.sourceType,
+      sourceText: context.text,
+      chapterId: context.chapterId,
+      chapterTitle: context.chapterTitle,
+      citations: citations ?? null,
+    }) as AIChatStoredMessage;
+
+    appendLocalAIMessage(savedMessage);
+    bumpAIThread(threadId, savedMessage.createdAt);
+
+    return savedMessage;
   };
 
   const handleAskAI = async () => {
-    if (!currentBook || !aiConfigured || !aiQuestion.trim()) return;
+    if (!currentBook || !aiConfigured || !aiComposer.trim()) return;
 
+    const question = aiComposer.trim();
+    const context = aiContext;
+    let resolvedThread: AIChatThread | null = null;
     setAILoading(true);
-    setAIError('');
-    setAIAnswer('');
-    setAICitations([]);
+    setAIComposer('');
 
     try {
+      resolvedThread = await resolveAIThreadForQuestion(question, context);
+      if (!resolvedThread) {
+        setAILoading(false);
+        return;
+      }
+
+      await persistAIMessage(resolvedThread.id, 'user', question, context);
+
       const result = await api.ai.ask({
         bookId: currentBook.id,
-        question: aiQuestion.trim(),
+        question,
       });
 
       if (!result.success) {
         if (result.code === 'NOT_CONFIGURED') {
           setAIConfigured(false);
         }
-        setAIError(result.error);
+
+        await persistAIMessage(resolvedThread.id, 'system', result.error, context);
         setAILoading(false);
         return;
       }
 
-      setAIAnswer(result.answer);
-      setAICitations(result.citations);
+      await persistAIMessage(resolvedThread.id, 'assistant', result.answer, context, result.citations);
       setAILoading(false);
     } catch (error) {
-      setAIError(error instanceof Error ? error.message : 'AI 请求失败');
+      if (resolvedThread) {
+        await persistAIMessage(
+          resolvedThread.id,
+          'system',
+          error instanceof Error ? error.message : 'AI 请求失败',
+          context
+        );
+      }
       setAILoading(false);
     }
   };
@@ -1062,7 +1219,7 @@ export default function Reader() {
         )}
 
         <div style={{ flex: 1, display: 'flex', minWidth: 0, position: 'relative', background: themePalette.contentBg }}>
-          <div style={{ flex: showToolsDrawer ? '1 1 calc(100% - 420px)' : '1 1 100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div data-testid="reader-content-frame" style={{ flex: '1 1 100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <div
               ref={contentContainerRef}
               data-testid="reader-scroll-container"
@@ -1168,7 +1325,7 @@ export default function Reader() {
               style={{
                 position: 'absolute',
                 top: '24px',
-                right: showToolsDrawer ? '444px' : '24px',
+                right: showToolsDrawer ? '416px' : '24px',
                 zIndex: 20,
               }}
               />
@@ -1178,18 +1335,27 @@ export default function Reader() {
             <aside
               data-testid="tools-drawer"
               style={{
-                width: '428px',
-                borderLeft: `1px solid ${themePalette.border}`,
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                bottom: '16px',
+                width: '392px',
+                border: `1px solid ${themePalette.border}`,
+                borderRadius: '20px',
                 background: themePalette.drawerBg,
-                boxShadow: '-16px 0 28px rgba(0, 0, 0, 0.06)',
+                boxShadow: '0 20px 48px rgba(30, 24, 19, 0.18)',
                 display: 'flex',
                 flexDirection: 'column',
+                overflow: 'hidden',
+                zIndex: 25,
               }}
             >
               <div style={{ padding: '16px 20px 12px', borderBottom: `1px solid ${themePalette.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: '18px', fontWeight: 700, color: themePalette.text }}>AI 问书</div>
-                  <div style={{ fontSize: '12px', color: themePalette.subText, marginTop: '2px' }}>{currentBook.title}・{aiContext.sourceLabel}</div>
+                  <div style={{ fontSize: '12px', color: themePalette.subText, marginTop: '2px' }}>
+                    {currentBook.title}・{activeAIThread?.title ?? aiContext.sourceLabel}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -1200,40 +1366,100 @@ export default function Reader() {
                 </button>
               </div>
 
+              {aiThreads.length > 0 ? (
+                <div style={{ padding: '12px 18px', borderBottom: `1px solid ${themePalette.border}`, display: 'flex', gap: '8px', overflowX: 'auto' }}>
+                  {aiThreads.map((thread) => (
+                    <button
+                      key={thread.id}
+                      type="button"
+                      data-testid={`ai-thread-${thread.id}`}
+                      aria-pressed={activeAIThreadId === thread.id}
+                      onClick={() => {
+                        void handleSelectAIThread(thread.id);
+                      }}
+                      style={{
+                        flex: '0 0 auto',
+                        padding: '8px 12px',
+                        borderRadius: '999px',
+                        border: `1px solid ${activeAIThreadId === thread.id ? themePalette.accentBorder : themePalette.border}`,
+                        background: activeAIThreadId === thread.id ? themePalette.accentBg : themePalette.cardBg,
+                        color: activeAIThreadId === thread.id ? themePalette.accentText : themePalette.text,
+                        fontSize: '12px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {thread.title}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
               <div style={{ padding: '14px 18px', borderBottom: `1px solid ${themePalette.border}`, background: themePalette.accentBg }}>
                 <div style={{ color: themePalette.accentText, lineHeight: 1.75, fontSize: '13.5px', maxHeight: '96px', overflowY: 'auto' }}>
                   {aiContext.text || '选中文本或标注后，内容显示在这里。'}
                 </div>
               </div>
 
-              <div data-testid="ai-answer" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px' }}>
+              <div data-testid="ai-answer" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {!aiConfigured ? (
                   <div style={{ background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, borderRadius: '12px', padding: '16px', color: themePalette.text, lineHeight: 1.8 }}>
                     <div style={{ fontWeight: 600, marginBottom: '8px' }}>AI 当前未配置</div>
                     <div style={{ marginBottom: '12px' }}>请先在设置页填写 API Key 和 Base URL。设置页只负责配置和状态，保存后这里会立即可用。</div>
                     <button type="button" onClick={() => navigate('/settings')}>去设置</button>
                   </div>
-                ) : aiLoading ? (
-                  <div style={{ color: themePalette.subText, lineHeight: 1.9, padding: '8px 0' }}>思考中...</div>
-                ) : aiAnswer ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    <div style={{ color: themePalette.text, lineHeight: 1.92, fontSize: '14.5px', whiteSpace: 'pre-wrap' }}>{aiAnswer}</div>
-                    {aiCitations.length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: `1px solid ${themePalette.border}`, paddingTop: '12px' }}>
-                        <div style={{ fontSize: '12px', color: themePalette.subText, fontWeight: 600 }}>引用来源</div>
-                        {aiCitations.map((citation) => (
-                          <div key={citation.chunkId} style={{ background: themePalette.cardBg, borderRadius: '8px', padding: '10px 12px' }}>
-                            <div style={{ fontSize: '11px', color: themePalette.subText, marginBottom: '3px' }}>{citation.chapterTitle}</div>
-                            <div style={{ fontSize: '13px', lineHeight: 1.7, color: themePalette.text }}>{citation.text}</div>
+                ) : aiMessages.length > 0 ? (
+                  <>
+                    {aiMessages.map((message) => {
+                      const isUser = message.role === 'user';
+                      const isSystem = message.role === 'system';
+
+                      return (
+                        <div
+                          key={message.id}
+                          data-testid={`ai-message-${message.id}`}
+                          data-role={message.role}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: isUser ? 'flex-end' : 'flex-start',
+                            gap: '8px',
+                          }}
+                        >
+                          <div
+                            style={{
+                              maxWidth: '88%',
+                              padding: '12px 14px',
+                              borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                              background: isUser ? '#44a6ff' : isSystem ? '#fff4df' : themePalette.cardBg,
+                              border: isUser ? 'none' : `1px solid ${themePalette.border}`,
+                              color: isUser ? '#ffffff' : themePalette.text,
+                              fontSize: '13.5px',
+                              lineHeight: 1.8,
+                              whiteSpace: 'pre-wrap',
+                            }}
+                          >
+                            {message.text}
                           </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+
+                          {message.citations.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+                              <div style={{ fontSize: '12px', color: themePalette.subText, fontWeight: 600 }}>引用来源</div>
+                              {message.citations.map((citation) => (
+                                <div key={`${message.id}-${citation.chunkId}`} style={{ background: themePalette.cardBg, borderRadius: '12px', border: `1px solid ${themePalette.border}`, padding: '10px 12px' }}>
+                                  <div style={{ fontSize: '11px', color: themePalette.subText, marginBottom: '3px' }}>{citation.chapterTitle}</div>
+                                  <div style={{ fontSize: '13px', lineHeight: 1.7, color: themePalette.text }}>{citation.text}</div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </>
                 ) : (
                   <div style={{ color: themePalette.subText, lineHeight: 1.9, fontSize: '13.5px', padding: '8px 0' }}>从当前选中文本、标注或章节发起提问，回答会显示在这里。</div>
                 )}
-                {aiError ? <div role="alert" style={{ color: '#cf1322', marginTop: '8px' }}>{aiError}</div> : null}
+                {aiLoading ? <div style={{ color: themePalette.subText, lineHeight: 1.9 }}>思考中...</div> : null}
               </div>
 
               {aiConfigured ? (
@@ -1243,7 +1469,7 @@ export default function Reader() {
                       <button
                         key={suggestion}
                         type="button"
-                        onClick={() => setAIQuestion(suggestion)}
+                        onClick={() => setAIComposer(suggestion)}
                         style={{ padding: '7px 12px', borderRadius: '999px', background: themePalette.cardBg, border: `1px solid ${themePalette.border}`, color: themePalette.text, fontSize: '12.5px' }}
                       >
                         {suggestion}
@@ -1253,8 +1479,8 @@ export default function Reader() {
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
                     <textarea
                       placeholder="提出问题..."
-                      value={aiQuestion}
-                      onChange={(event) => setAIQuestion(event.target.value)}
+                      value={aiComposer}
+                      onChange={(event) => setAIComposer(event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' && !event.shiftKey) {
                           event.preventDefault();
@@ -1267,8 +1493,8 @@ export default function Reader() {
                     <button
                       type="button"
                       onClick={() => void handleAskAI()}
-                      disabled={!aiQuestion.trim() || aiLoading}
-                      style={{ minWidth: '64px', height: '38px', borderRadius: '999px', border: 'none', background: (!aiQuestion.trim() || aiLoading) ? '#b3d9ff' : '#44a6ff', color: '#fff', padding: '0 14px', fontWeight: 600, fontSize: '13px', cursor: (!aiQuestion.trim() || aiLoading) ? 'default' : 'pointer' }}
+                      disabled={!aiComposer.trim() || aiLoading}
+                      style={{ minWidth: '64px', height: '38px', borderRadius: '999px', border: 'none', background: (!aiComposer.trim() || aiLoading) ? '#b3d9ff' : '#44a6ff', color: '#fff', padding: '0 14px', fontWeight: 600, fontSize: '13px', cursor: (!aiComposer.trim() || aiLoading) ? 'default' : 'pointer' }}
                     >
                       发送
                     </button>
@@ -1303,4 +1529,3 @@ export default function Reader() {
     </div>
   );
 }
-

@@ -50,6 +50,29 @@ export interface ElectronAPI {
     >;
   };
 
+  aiChat: {
+    listThreads: (bookId: string) => Promise<any[]>;
+    createThread: (data: {
+      bookId: string;
+      chapterId?: string | null;
+      chapterTitle: string;
+      title: string;
+    }) => Promise<any>;
+    listMessages: (threadId: string) => Promise<any[]>;
+    appendMessage: (data: {
+      threadId: string;
+      bookId: string;
+      role: 'user' | 'assistant' | 'system';
+      text: string;
+      sourceType?: string | null;
+      sourceText?: string | null;
+      chapterId?: string | null;
+      chapterTitle?: string | null;
+      citations?: unknown[] | null;
+    }) => Promise<any>;
+    touchThread: (threadId: string) => Promise<{ success: boolean; updatedAt: number }>;
+  };
+
   tts: {
     synthesize: (data: { text: string; voice?: string; rate?: number }) => Promise<Uint8Array>;
   };
